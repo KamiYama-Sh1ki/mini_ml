@@ -73,6 +73,29 @@ add_test(
     COMMAND test_backend
 )
 
+add_executable(test_conjugate_gradient
+    tests/test_conjugate_gradient.cpp
+)
+
+target_include_directories(test_conjugate_gradient
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+)
+
+add_test(
+    NAME conjugate_gradient
+    COMMAND test_conjugate_gradient
+)
+
+add_executable(lab1_polynomial_cg
+    lab/lab1/main_cg.cpp
+)
+
+target_link_libraries(lab1_polynomial_cg
+    PRIVATE
+        mini_ml
+)
+
 add_executable(lab1_polynomial
     lab/lab1/main.cpp
 )
