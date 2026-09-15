@@ -1,0 +1,308 @@
+import argparse
+import csv
+import math
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+
+
+REQUIRED_FILES = ("samples.csv", "curve.csv", "loss.csv", "checkpoints.csv")
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Plot a mini_ml lab1 run. With no epochs, plot the final prediction from "
+            "curve.csv; with epochs, plot those saved checkpoint weights."
+        )
+    )
+    parser.add_argument(
+        "epochs",
+        metavar="EPOCH",
+        nargs="*",
+        type=int,
+        help="saved checkpoint epochs to plot, for example: 2000 4000 6000",
+    )
+    parser.add_argument(
+        "--run-dir",
+        type=Path,
+        help="run directory containing the CSV files (default: latest run in lab1/output)",
+    )
+    return parser, parser.parse_args()
+
+
+def has_required_files(directory):
+    return directory.is_dir() and all(
+        (directory / filename).is_file() for filename in REQUIRED_FILES
+    )
+
+
+def select_run_directory(explicit_directory):
+    if explicit_directory is not None:
+        run_directory = explicit_directory.expanduser().resolve()
+        missing = [
+            filename
+            for filename in REQUIRED_FILES
+            if not (run_directory / filename).is_file()
+        ]
+        if missing:
+            raise ValueError(
+                f"run directory '{run_directory}' is missing: {', '.join(missing)}"
+            )
+        return run_directory
+
+    output_directory = Path(__file__).resolve().parent / "output"
+    if not output_directory.is_dir():
+        raise ValueError(f"output directory does not exist: '{output_directory}'")
+
+    run_directories = [
+        path for path in output_directory.iterdir() if has_required_files(path)
+    ]
+    if not run_directories:
+        required = ", ".join(REQUIRED_FILES)
+        raise ValueError(
+            f"no completed run directory found under '{output_directory}'; "
+            f"a run must contain {required}"
+        )
+
+    # Run directories use a lexicographically sortable start-time name.
+    return max(run_directories, key=lambda path: path.name)
+
+
+def read_rows(path, required_columns):
+    with path.open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        fieldnames = reader.fieldnames or []
+        missing = [name for name in required_columns if name not in fieldnames]
+        if missing:
+            raise ValueError(f"'{path}' is missing columns: {', '.join(missing)}")
+        rows = list(reader)
+
+    if not rows:
+        raise ValueError(f"'{path}' contains no data rows")
+    return fieldnames, rows
+
+
+def parse_number(row, column, path, row_number):
+    try:
+        value = float(row[column])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            f"invalid {column!r} value in '{path}' at CSV row {row_number}"
+        ) from error
+    if not math.isfinite(value):
+        raise ValueError(
+            f"non-finite {column!r} value in '{path}' at CSV row {row_number}"
+        )
+    return value
+
+
+def read_columns(path, names):
+    _, rows = read_rows(path, names)
+    columns = [[] for _ in names]
+    for row_number, row in enumerate(rows, start=2):
+        for values, name in zip(columns, names):
+            values.append(parse_number(row, name, path, row_number))
+    return columns
+
+
+def parse_epoch(row, path, row_number):
+    value = parse_number(row, "epoch", path, row_number)
+    if not value.is_integer():
+        raise ValueError(
+            f"non-integer 'epoch' value in '{path}' at CSV row {row_number}"
+        )
+    return int(value)
+
+
+def read_checkpoints(path):
+    fieldnames, rows = read_rows(path, ("epoch", "loss"))
+    weight_columns = sorted(
+        (
+            name
+            for name in fieldnames
+            if name.startswith("w") and name[1:].isdigit()
+        ),
+        key=lambda name: int(name[1:]),
+    )
+    if not weight_columns:
+        raise ValueError(f"'{path}' contains no weight columns (expected w0, w1, ...)")
+
+    expected_columns = [f"w{index}" for index in range(len(weight_columns))]
+    if weight_columns != expected_columns:
+        raise ValueError(
+            f"'{path}' weight columns must be contiguous from w0; found: "
+            f"{', '.join(weight_columns)}"
+        )
+
+    checkpoints = {}
+    for row_number, row in enumerate(rows, start=2):
+        epoch = parse_epoch(row, path, row_number)
+        if epoch in checkpoints:
+            raise ValueError(f"duplicate epoch {epoch} in '{path}'")
+        checkpoints[epoch] = {
+            "loss": parse_number(row, "loss", path, row_number),
+            "weights": [
+                parse_number(row, name, path, row_number) for name in weight_columns
+            ],
+        }
+    return checkpoints
+
+
+def polynomial_predictions(x_values, weights):
+    predictions = []
+    for x_value in x_values:
+        prediction = 0.0
+        for weight in reversed(weights):
+            prediction = prediction * x_value + weight
+        predictions.append(prediction)
+    return predictions
+
+
+def regression_metrics(true_values, predicted_values):
+    if len(true_values) != len(predicted_values) or not true_values:
+        raise ValueError("regression metrics require equally sized, non-empty data")
+
+    errors = [
+        predicted - actual
+        for actual, predicted in zip(true_values, predicted_values)
+    ]
+    mse = sum(error * error for error in errors) / len(errors)
+    mae = sum(abs(error) for error in errors) / len(errors)
+    true_mean = sum(true_values) / len(true_values)
+    total_variation = sum((value - true_mean) ** 2 for value in true_values)
+    residual_variation = sum(error * error for error in errors)
+    r_squared = (
+        1.0 - residual_variation / total_variation
+        if total_variation != 0.0
+        else (1.0 if residual_variation == 0.0 else float("nan"))
+    )
+    return r_squared, math.sqrt(mse), mae
+
+
+def plot_fit(run_directory, sample_x, sample_y, curve_x, true_y, predictions):
+    figure, axes = plt.subplots(figsize=(9, 6))
+    axes.scatter(sample_x, sample_y, s=22, alpha=0.65, label="Noisy samples")
+    axes.plot(curve_x, true_y, linewidth=2, label="True sine curve")
+    for label, predicted_y in predictions:
+        r_squared, _, _ = regression_metrics(true_y, predicted_y)
+        axes.plot(curve_x, predicted_y, linewidth=2, label=f"{label} (R²={r_squared:.4f})")
+    axes.set_title("Polynomial Regression Fit")
+    axes.set_xlabel("x")
+    axes.set_ylabel("y")
+    axes.grid(True, alpha=0.3)
+    axes.legend()
+    figure.tight_layout()
+    figure.savefig(run_directory / "fit.png", dpi=150)
+    plt.close(figure)
+
+
+def plot_loss(run_directory, loss_epochs, losses, selected_checkpoints):
+    figure, axes = plt.subplots(figsize=(9, 6))
+    axes.plot(loss_epochs, losses, linewidth=1.5, label="Training loss")
+    if selected_checkpoints:
+        selected_epochs = [epoch for epoch, _ in selected_checkpoints]
+        selected_losses = [checkpoint["loss"] for _, checkpoint in selected_checkpoints]
+        axes.scatter(
+            selected_epochs,
+            selected_losses,
+            s=42,
+            zorder=3,
+            label="Selected checkpoints",
+        )
+        for epoch, checkpoint in selected_checkpoints:
+            axes.annotate(
+                str(epoch),
+                (epoch, checkpoint["loss"]),
+                xytext=(0, 7),
+                textcoords="offset points",
+                ha="center",
+                fontsize=8,
+            )
+    axes.set_title("Training Loss")
+    axes.set_xlabel("Epoch")
+    axes.set_ylabel("Mean squared error")
+    axes.grid(True, alpha=0.3)
+    axes.legend()
+    figure.tight_layout()
+    figure.savefig(run_directory / "loss.png", dpi=150)
+    plt.close(figure)
+
+
+def main():
+    parser, arguments = parse_arguments()
+    try:
+        run_directory = select_run_directory(arguments.run_dir)
+
+        sample_x, sample_y = read_columns(
+            run_directory / "samples.csv", ("x", "y")
+        )
+        curve_x, true_y, final_predicted_y = read_columns(
+            run_directory / "curve.csv", ("x", "y_true", "y_pred")
+        )
+        loss_epochs, losses = read_columns(
+            run_directory / "loss.csv", ("epoch", "loss")
+        )
+
+        requested_epochs = list(dict.fromkeys(arguments.epochs))
+        selected_checkpoints = []
+        if requested_epochs:
+            checkpoints = read_checkpoints(run_directory / "checkpoints.csv")
+            unavailable = [
+                epoch for epoch in requested_epochs if epoch not in checkpoints
+            ]
+            if unavailable:
+                available = ", ".join(str(epoch) for epoch in sorted(checkpoints))
+                raise ValueError(
+                    "requested epoch(s) are not saved checkpoints: "
+                    f"{', '.join(str(epoch) for epoch in unavailable)}. "
+                    f"Available checkpoint epochs: {available}"
+                )
+            selected_checkpoints = [
+                (epoch, checkpoints[epoch]) for epoch in requested_epochs
+            ]
+            predictions = [
+                (
+                    f"Epoch {epoch}",
+                    polynomial_predictions(curve_x, checkpoint["weights"]),
+                )
+                for epoch, checkpoint in selected_checkpoints
+            ]
+        else:
+            predictions = [("Final prediction", final_predicted_y)]
+
+        plot_fit(
+            run_directory,
+            sample_x,
+            sample_y,
+            curve_x,
+            true_y,
+            predictions,
+        )
+        plot_loss(
+            run_directory,
+            loss_epochs,
+            losses,
+            selected_checkpoints,
+        )
+
+        print(f"run directory: {run_directory}")
+        print("Regression has no classification accuracy (acc).")
+        print("Dense-curve regression metrics:")
+        for label, predicted_y in predictions:
+            r_squared, rmse, mae = regression_metrics(true_y, predicted_y)
+            print(
+                f"  {label}: R^2={r_squared:.8f}, "
+                f"RMSE={rmse:.8f}, MAE={mae:.8f}"
+            )
+        print(f"generated: {run_directory / 'fit.png'}")
+        print(f"generated: {run_directory / 'loss.png'}")
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+
+
+if __name__ == "__main__":
+    main()
