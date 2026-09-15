@@ -9,14 +9,21 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
-REQUIRED_FILES = ("samples.csv", "curve.csv", "loss.csv", "checkpoints.csv")
+REQUIRED_FILES = (
+    "samples.csv",
+    "curve.csv",
+    "loss.csv",
+    "checkpoints.csv",
+    "config.csv",
+)
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description=(
-            "Plot a mini_ml lab1 run. With no epochs, plot the final prediction from "
-            "curve.csv; with epochs, plot those saved checkpoint weights."
+            "Plot saved checkpoint weights from a mini_ml lab1 run. Positional "
+            "epochs select exact checkpoints; otherwise all checkpoints are plotted "
+            "by default."
         )
     )
     parser.add_argument(
@@ -27,9 +34,17 @@ def parse_arguments():
         help="saved checkpoint epochs to plot, for example: 2000 4000 6000",
     )
     parser.add_argument(
+        "--plot-every",
+        metavar="N|default",
+        help=(
+            "plot every N epochs, or 'default' to use the C++ checkpoint interval "
+            "(default: plot every saved checkpoint)"
+        ),
+    )
+    parser.add_argument(
         "--run-dir",
         type=Path,
-        help="run directory containing the CSV files (default: latest run in lab1/output)",
+        help="run directory containing the CSV files (default: latest run in lab/lab1/output)",
     )
     return parser, parser.parse_args()
 
@@ -118,6 +133,30 @@ def parse_epoch(row, path, row_number):
     return int(value)
 
 
+def parse_positive_integer(row, column, path, row_number):
+    value = parse_number(row, column, path, row_number)
+    if not value.is_integer() or value <= 0:
+        raise ValueError(
+            f"{column!r} in '{path}' must be a positive integer "
+            f"(CSV row {row_number})"
+        )
+    return int(value)
+
+
+def read_config(path):
+    _, rows = read_rows(path, ("epochs", "checkpoint_interval"))
+    if len(rows) != 1:
+        raise ValueError(f"'{path}' must contain exactly one configuration row")
+
+    row = rows[0]
+    return {
+        "epochs": parse_positive_integer(row, "epochs", path, 2),
+        "checkpoint_interval": parse_positive_integer(
+            row, "checkpoint_interval", path, 2
+        ),
+    }
+
+
 def read_checkpoints(path):
     fieldnames, rows = read_rows(path, ("epoch", "loss"))
     weight_columns = sorted(
@@ -150,6 +189,64 @@ def read_checkpoints(path):
             ],
         }
     return checkpoints
+
+
+def parse_plot_every(value, checkpoint_interval):
+    if value is None or value == "default":
+        return None
+
+    try:
+        plot_interval = int(value)
+    except ValueError as error:
+        raise ValueError(
+            "--plot-every must be a positive integer or 'default'"
+        ) from error
+
+    if plot_interval <= 0:
+        raise ValueError("--plot-every must be a positive integer or 'default'")
+    if plot_interval % checkpoint_interval != 0:
+        raise ValueError(
+            f"--plot-every ({plot_interval}) must be an integer multiple of the "
+            f"C++ checkpoint interval ({checkpoint_interval})"
+        )
+    return plot_interval
+
+
+def select_checkpoints_by_frequency(checkpoints, config, plot_every):
+    configured_epochs = config["epochs"]
+    checkpoint_interval = config["checkpoint_interval"]
+    invalid_epochs = sorted(
+        epoch for epoch in checkpoints if epoch <= 0 or epoch > configured_epochs
+    )
+    if invalid_epochs:
+        raise ValueError(
+            "checkpoint epoch(s) fall outside the configured training range: "
+            + ", ".join(str(epoch) for epoch in invalid_epochs)
+        )
+    if configured_epochs not in checkpoints:
+        raise ValueError(
+            f"final epoch {configured_epochs} from config.csv is not saved in "
+            "checkpoints.csv"
+        )
+
+    plot_interval = parse_plot_every(plot_every, checkpoint_interval)
+    if plot_interval is None:
+        selected_epochs = sorted(checkpoints)
+    else:
+        selected_epochs = list(
+            range(plot_interval, configured_epochs + 1, plot_interval)
+        )
+        if configured_epochs not in selected_epochs:
+            selected_epochs.append(configured_epochs)
+
+        unavailable = [epoch for epoch in selected_epochs if epoch not in checkpoints]
+        if unavailable:
+            raise ValueError(
+                "checkpoint(s) required by --plot-every are missing: "
+                + ", ".join(str(epoch) for epoch in unavailable)
+            )
+
+    return [(epoch, checkpoints[epoch]) for epoch in selected_epochs]
 
 
 def polynomial_predictions(x_values, weights):
@@ -235,22 +332,27 @@ def plot_loss(run_directory, loss_epochs, losses, selected_checkpoints):
 def main():
     parser, arguments = parse_arguments()
     try:
+        if arguments.epochs and arguments.plot_every is not None:
+            raise ValueError(
+                "positional EPOCH arguments cannot be used together with --plot-every"
+            )
+
         run_directory = select_run_directory(arguments.run_dir)
 
         sample_x, sample_y = read_columns(
             run_directory / "samples.csv", ("x", "y")
         )
-        curve_x, true_y, final_predicted_y = read_columns(
+        curve_x, true_y, _ = read_columns(
             run_directory / "curve.csv", ("x", "y_true", "y_pred")
         )
         loss_epochs, losses = read_columns(
             run_directory / "loss.csv", ("epoch", "loss")
         )
 
+        config = read_config(run_directory / "config.csv")
+        checkpoints = read_checkpoints(run_directory / "checkpoints.csv")
         requested_epochs = list(dict.fromkeys(arguments.epochs))
-        selected_checkpoints = []
         if requested_epochs:
-            checkpoints = read_checkpoints(run_directory / "checkpoints.csv")
             unavailable = [
                 epoch for epoch in requested_epochs if epoch not in checkpoints
             ]
@@ -272,7 +374,16 @@ def main():
                 for epoch, checkpoint in selected_checkpoints
             ]
         else:
-            predictions = [("Final prediction", final_predicted_y)]
+            selected_checkpoints = select_checkpoints_by_frequency(
+                checkpoints, config, arguments.plot_every
+            )
+            predictions = [
+                (
+                    f"Epoch {epoch}",
+                    polynomial_predictions(curve_x, checkpoint["weights"]),
+                )
+                for epoch, checkpoint in selected_checkpoints
+            ]
 
         plot_fit(
             run_directory,

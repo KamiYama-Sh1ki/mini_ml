@@ -1,4 +1,5 @@
 #include <chrono>
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -10,6 +11,8 @@
 #include <numbers>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include <ml/core/random.hpp>
 #include <ml/data/sampling.hpp>
@@ -24,11 +27,60 @@ constexpr std::uint64_t seed = 42;
 constexpr int sample_count = 100;
 constexpr std::size_t degree = 9;
 constexpr double noise_stddev = 0.1;
-constexpr int epochs = 1000;
+constexpr std::size_t default_epochs = 1000;
 constexpr double learning_rate = 0.1;
 constexpr double weight_decay = 1e-3;
-constexpr int checkpoint_interval = 200;
+constexpr std::size_t default_checkpoint_interval = 200;
 constexpr int curve_point_count = 400;
+
+struct Options {
+    std::size_t epochs = default_epochs;
+    std::size_t checkpoint_interval = default_checkpoint_interval;
+    bool show_help = false;
+};
+
+std::size_t parse_positive_integer(std::string_view option, std::string_view value) {
+    std::size_t parsed_value = 0;
+    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), parsed_value);
+    if (error != std::errc{} || end != value.data() + value.size() || parsed_value == 0) {
+        throw std::invalid_argument(std::string(option) + " requires a positive integer, got '" +
+                                    std::string(value) + "'");
+    }
+    return parsed_value;
+}
+
+Options parse_options(int argc, char* argv[]) {
+    Options options;
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view option = argv[i];
+        if (option == "-h" || option == "--help") {
+            options.show_help = true;
+            continue;
+        }
+
+        if (option != "--epochs" && option != "--save-every" && option != "--checkpoint-interval") {
+            throw std::invalid_argument("unknown option: " + std::string(option));
+        }
+        if (++i >= argc) throw std::invalid_argument("missing value for " + std::string(option));
+
+        const std::size_t value = parse_positive_integer(option, argv[i]);
+        if (option == "--epochs") {
+            options.epochs = value;
+        } else {
+            options.checkpoint_interval = value;
+        }
+    }
+    return options;
+}
+
+void print_usage(std::ostream& output, std::string_view program) {
+    output << "Usage: " << program << " [--epochs N] [--save-every N]\n"
+           << "  --epochs N              Number of training epochs (default: " << default_epochs << ")\n"
+           << "  --save-every N          Save a checkpoint every N epochs (default: "
+           << default_checkpoint_interval << ")\n"
+           << "  --checkpoint-interval N Alias for --save-every\n"
+           << "  -h, --help              Show this help\n";
+}
 
 double true_curve(double x) {
     return std::sin(std::numbers::pi_v<double> * x);
@@ -58,12 +110,17 @@ std::string format_start_time(const std::chrono::system_clock::time_point& start
 
 }
 
-int main() {
-    const auto start_time = std::chrono::system_clock::now();
-
+int main(int argc, char* argv[]) {
     try {
+        const Options options = parse_options(argc, argv);
+        if (options.show_help) {
+            print_usage(std::cout, argv[0]);
+            return 0;
+        }
+
+        const auto start_time = std::chrono::system_clock::now();
         const std::filesystem::path output_directory =
-            std::filesystem::path("lab1/output") / format_start_time(start_time);
+            std::filesystem::path("lab/lab1/output") / format_start_time(start_time);
         if (!std::filesystem::create_directories(output_directory)) {
             throw std::runtime_error("output directory already exists: " + output_directory.string());
         }
@@ -88,8 +145,8 @@ int main() {
             config_file << "seed,sample_count,degree,noise_stddev,epochs,learning_rate,weight_decay,"
                            "checkpoint_interval,curve_point_count\n";
             config_file << seed << ',' << sample_count << ',' << degree << ',' << noise_stddev << ','
-                        << epochs << ',' << learning_rate << ',' << weight_decay << ','
-                        << checkpoint_interval << ',' << curve_point_count << '\n';
+                        << options.epochs << ',' << learning_rate << ',' << weight_decay << ','
+                        << options.checkpoint_interval << ',' << curve_point_count << '\n';
         }
 
         {
@@ -102,17 +159,19 @@ int main() {
             for (std::size_t i = 0; i < model.weights().size(); ++i) checkpoints_file << ",gradient" << i;
             checkpoints_file << '\n';
 
-            for (int epoch = 1; epoch <= epochs; ++epoch) {
+            for (std::size_t epoch = 1;; ++epoch) {
                 optimizer.step(model.weights(), result.gradient);
                 result = backend.compute_loss_and_gradient(model, data, loss);
                 loss_file << epoch << ',' << result.loss << '\n';
 
-                if (epoch % checkpoint_interval == 0 || epoch == epochs) {
+                if (epoch % options.checkpoint_interval == 0 || epoch == options.epochs) {
                     checkpoints_file << epoch << ',' << result.loss;
                     for (const double weight : model.weights()) checkpoints_file << ',' << weight;
                     for (const double gradient : result.gradient) checkpoints_file << ',' << gradient;
                     checkpoints_file << '\n';
                 }
+
+                if (epoch == options.epochs) break;
             }
         }
 
@@ -131,7 +190,8 @@ int main() {
                   << "final loss: " << final_loss << '\n'
                   << "degree: " << degree << '\n'
                   << "sample count: " << sample_count << '\n'
-                  << "epochs: " << epochs << '\n'
+                  << "epochs: " << options.epochs << '\n'
+                  << "checkpoint interval: " << options.checkpoint_interval << '\n'
                   << "learning rate: " << learning_rate << '\n'
                   << "weight decay: " << weight_decay << '\n'
                   << "CSV output: " << std::filesystem::absolute(output_directory).string() << '\n';

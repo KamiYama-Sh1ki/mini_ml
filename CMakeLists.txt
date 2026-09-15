@@ -74,7 +74,7 @@ add_test(
 )
 
 add_executable(lab1_polynomial
-    lab1/main.cpp
+    lab/lab1/main.cpp
 )
 
 target_link_libraries(lab1_polynomial
