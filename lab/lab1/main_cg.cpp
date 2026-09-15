@@ -19,19 +19,19 @@
 #include <ml/data/sampling.hpp>
 #include <ml/model/regression.hpp>
 #include <ml/ops/loss.hpp>
-#include <ml/optimizer/sgd.hpp>
+#include <ml/optimizer/conjugate_gradient.hpp>
 #include <ml/runtime/serial.hpp>
 
 namespace {
 
 constexpr std::uint64_t default_seed = 42;
-constexpr int default_sample_count = 9;
+constexpr int default_sample_count = 100;
 constexpr std::size_t default_degree = 15;
 constexpr double default_noise_stddev = 0.1;
 constexpr std::size_t default_epochs = 10000;
 constexpr double default_learning_rate = 0.01;
 constexpr double default_weight_decay = 0.0;
-constexpr std::size_t default_checkpoint_interval = 1000;
+constexpr std::size_t default_checkpoint_interval = 5;
 constexpr int curve_point_count = 400;
 
 struct Options {
@@ -123,7 +123,7 @@ void print_usage(std::ostream& output, std::string_view program) {
            << "  --degree N              Polynomial degree, including zero (default: " << default_degree << ")\n"
            << "  --noise X               Noise standard deviation, >= 0 (default: " << default_noise_stddev << ")\n"
            << "  --epochs N              Number of training epochs (default: " << default_epochs << ")\n"
-           << "  --learning-rate X       Positive SGD learning rate (default: " << default_learning_rate << ")\n"
+           << "  --learning-rate X       Positive CG learning rate (default: " << default_learning_rate << ")\n"
            << "  --weight-decay X        L2 weight decay, >= 0 (default: " << default_weight_decay << ")\n"
            << "  --seed N                Random seed, >= 0 (default: " << default_seed << ")\n"
            << "  --save-every N          Save a checkpoint every N epochs (default: "
@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
         ml::PolynomialRegression model(options.degree);
         ml::MSELoss loss;
         ml::SerialBackend backend;
-        ml::SGD optimizer(options.learning_rate, options.weight_decay);
+        ml::ConjugateGradient optimizer(options.learning_rate, options.weight_decay);
         auto result = backend.compute_loss_and_gradient(model, data, loss);
 
         {
@@ -263,7 +263,7 @@ int main(int argc, char* argv[]) {
                   << "weight decay: " << options.weight_decay << '\n'
                   << "CSV output: " << std::filesystem::absolute(output_directory).string() << '\n';
     } catch (const std::exception& error) {
-        std::cerr << "lab1 failed: " << error.what() << '\n';
+        std::cerr << "lab1-cg failed: " << error.what() << '\n';
         return 1;
     }
 

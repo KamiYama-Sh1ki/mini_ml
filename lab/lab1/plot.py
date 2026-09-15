@@ -124,6 +124,21 @@ def read_columns(path, names):
     return columns
 
 
+def read_loss_history(path):
+    fieldnames, rows = read_rows(path, ("epoch", "loss"))
+    epochs = []
+    losses = []
+    objective_losses = [] if "objective_loss" in fieldnames else None
+    for row_number, row in enumerate(rows, start=2):
+        epochs.append(parse_number(row, "epoch", path, row_number))
+        losses.append(parse_number(row, "loss", path, row_number))
+        if objective_losses is not None:
+            objective_losses.append(
+                parse_number(row, "objective_loss", path, row_number)
+            )
+    return epochs, losses, objective_losses
+
+
 def parse_epoch(row, path, row_number):
     value = parse_number(row, "epoch", path, row_number)
     if not value.is_integer():
@@ -287,6 +302,12 @@ def plot_fit(run_directory, sample_x, sample_y, curve_x, true_y, predictions):
     for label, predicted_y in predictions:
         r_squared, _, _ = regression_metrics(true_y, predicted_y)
         axes.plot(curve_x, predicted_y, linewidth=2, label=f"{label} (R²={r_squared:.4f})")
+    # Truncate the y-axis around the data and the true curve so exploding
+    # fits stay readable instead of stretching the scale to their extremes.
+    data_min = min(min(sample_y), min(true_y))
+    data_max = max(max(sample_y), max(true_y))
+    data_range = data_max - data_min
+    axes.set_ylim(data_min - 0.5 * data_range, data_max + 0.5 * data_range)
     axes.set_title("Polynomial Regression Fit")
     axes.set_xlabel("x")
     axes.set_ylabel("y")
@@ -297,9 +318,23 @@ def plot_fit(run_directory, sample_x, sample_y, curve_x, true_y, predictions):
     plt.close(figure)
 
 
-def plot_loss(run_directory, loss_epochs, losses, selected_checkpoints):
+def plot_loss(
+    run_directory,
+    loss_epochs,
+    losses,
+    objective_losses,
+    selected_checkpoints,
+):
     figure, axes = plt.subplots(figsize=(9, 6))
-    axes.plot(loss_epochs, losses, linewidth=1.5, label="Training loss")
+    axes.plot(loss_epochs, losses, linewidth=1.5, label="Training MSE")
+    if objective_losses is not None and objective_losses != losses:
+        axes.plot(
+            loss_epochs,
+            objective_losses,
+            linewidth=1.3,
+            linestyle="--",
+            label="Objective (MSE + L2 penalty)",
+        )
     if selected_checkpoints:
         selected_epochs = [epoch for epoch, _ in selected_checkpoints]
         selected_losses = [checkpoint["loss"] for _, checkpoint in selected_checkpoints]
@@ -321,7 +356,7 @@ def plot_loss(run_directory, loss_epochs, losses, selected_checkpoints):
             )
     axes.set_title("Training Loss")
     axes.set_xlabel("Epoch")
-    axes.set_ylabel("Mean squared error")
+    axes.set_ylabel("Loss")
     axes.grid(True, alpha=0.3)
     axes.legend()
     figure.tight_layout()
@@ -345,8 +380,8 @@ def main():
         curve_x, true_y, _ = read_columns(
             run_directory / "curve.csv", ("x", "y_true", "y_pred")
         )
-        loss_epochs, losses = read_columns(
-            run_directory / "loss.csv", ("epoch", "loss")
+        loss_epochs, losses, objective_losses = read_loss_history(
+            run_directory / "loss.csv"
         )
 
         config = read_config(run_directory / "config.csv")
@@ -397,6 +432,7 @@ def main():
             run_directory,
             loss_epochs,
             losses,
+            objective_losses,
             selected_checkpoints,
         )
 
