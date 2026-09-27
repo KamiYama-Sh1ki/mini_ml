@@ -9,8 +9,7 @@ include/ml/          头文件库(header-only 接口 + 少量 .cpp 实现)
   core/              数据集、样本、随机数、训练结果
   data/              曲线采样(sample_curve_noisy)
   model/             PolynomialRegression(Horner 求值)
-  ops/               MSELoss
-  optimizer/         SGD、ConjugateGradient
+  opt/               MSELoss、SGD、ConjugateGradient
   runtime/           SerialBackend(全批量损失与梯度)
 src/backends/cpu/    后端实现
 tests/               assert 风格单元测试(CTest 注册)

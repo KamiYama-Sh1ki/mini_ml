@@ -7,11 +7,6 @@
 
 namespace ml {
 
-// Nonlinear conjugate gradient (Fletcher-Reeves) for objectives that are
-// quadratic in the weights. The exact step size along the
-// previous direction is recovered from the difference of consecutive gradients,
-// so step() needs no extra loss evaluations: learning_rate only scales the
-// first, uncorrected move along each new search direction.
 class ConjugateGradient {
 public:
     explicit ConjugateGradient(double learning_rate, double weight_decay = 0.0)
@@ -37,9 +32,6 @@ public:
         }
 
         if (has_previous_state_) {
-            // For a quadratic objective, dg = g(w) - g(w - alpha_prev * d) equals
-            // alpha_prev * H * d, so the exact line-search step along d is
-            // -d·g_prev / d·Hd.
             double direction_dot_gradient = 0.0;
             double direction_dot_dg = 0.0;
             for (std::size_t i = 0; i < weights.size(); ++i) {
@@ -71,7 +63,6 @@ public:
         }
         if (has_previous_state_ && previous_squared_norm > 0.0) {
             beta = squared_norm / previous_squared_norm;
-            // Guard against rounding noise when both norms are near zero.
             if (!(beta > 0.0) || !std::isfinite(beta)) beta = 0.0;
             if (beta > 1.0) beta = 1.0;
         }
@@ -81,9 +72,6 @@ public:
             direction_[i] = -gradient_[i] + beta * direction_[i];
         }
 
-        // Reuse the exact line-search step size as the probe along each new
-        // direction: consecutive directions have similar curvature scale, which
-        // keeps the uncorrected move from overshooting.
         double probe_alpha = learning_rate_;
         if (has_previous_state_ && last_line_search_alpha_ > 0.0 &&
             std::isfinite(last_line_search_alpha_)) {
@@ -120,6 +108,31 @@ private:
     double previous_alpha_ = 0.0;
     double last_line_search_alpha_ = 0.0;
     bool has_previous_state_ = false;
+};
+
+}
+
+namespace ml {
+
+class SGD {
+public:
+    explicit SGD(double learning_rate, double weight_decay = 0.0)
+        : learning_rate_(learning_rate), weight_decay_(weight_decay) {
+        if (!(learning_rate > 0.0)) throw std::invalid_argument("SGD: learning_rate must be > 0");
+        if (!(weight_decay >= 0.0)) throw std::invalid_argument("SGD: weight_decay must be >= 0");
+    }
+
+    void step(std::vector<double>& weights, const std::vector<double>& gradient) const {
+        if (weights.size() != gradient.size()) throw std::invalid_argument("SGD::step: weights and gradient must have the same size");
+
+        for (std::size_t i = 0; i < weights.size(); ++i) {
+            weights[i] -= learning_rate_ * (gradient[i] + weight_decay_ * weights[i]);
+        }
+    }
+
+private:
+    double learning_rate_;
+    double weight_decay_;
 };
 
 }

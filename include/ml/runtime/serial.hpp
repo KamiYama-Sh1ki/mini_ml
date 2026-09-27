@@ -3,7 +3,7 @@
 #include <ml/core/dataset.hpp>
 #include <ml/core/result.hpp>
 #include <ml/model/regression.hpp>
-#include <ml/ops/loss.hpp>
+#include <ml/opt/loss.hpp>
 
 namespace ml {
 

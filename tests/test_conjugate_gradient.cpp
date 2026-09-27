@@ -3,8 +3,7 @@
 #include <iostream>
 #include <vector>
 
-#include <ml/optimizer/conjugate_gradient.hpp>
-#include <ml/optimizer/sgd.hpp>
+#include <ml/opt/optimizer.hpp>
 
 namespace {
 

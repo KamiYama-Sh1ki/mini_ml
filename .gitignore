@@ -46,3 +46,7 @@ __pycache__/
 Thumbs.db
 Desktop.ini
 *.Zone.Identifier
+
+# Personal lab reports and Word lock files
+*.docx
+~$*

@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <ml/optimizer/sgd.hpp>
+#include <ml/opt/optimizer.hpp>
 #include <ml/runtime/serial.hpp>
 
 int main() {

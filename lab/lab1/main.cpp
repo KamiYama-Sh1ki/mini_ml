@@ -18,8 +18,8 @@
 #include <ml/core/random.hpp>
 #include <ml/data/sampling.hpp>
 #include <ml/model/regression.hpp>
-#include <ml/ops/loss.hpp>
-#include <ml/optimizer/sgd.hpp>
+#include <ml/opt/loss.hpp>
+#include <ml/opt/optimizer.hpp>
 #include <ml/runtime/serial.hpp>
 
 namespace {
