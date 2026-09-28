@@ -134,7 +134,7 @@ void print_usage(std::ostream& output, std::string_view program) {
            << "  --degree N              Polynomial degree, including zero (default: " << default_degree << ")\n"
            << "  --noise X               Noise standard deviation, >= 0 (default: " << default_noise_stddev << ")\n"
            << "  --epochs N              Number of training epochs (default: " << default_epochs << ")\n"
-           << "  --learning-rate X       Positive learning rate (default: " << default_learning_rate << ")\n"
+           << "  --learning-rate X       Positive learning rate, used by sgd only (default: " << default_learning_rate << ")\n"
            << "  --weight-decay X        L2 weight decay, >= 0, w0 exempt (default: " << default_weight_decay << ")\n"
            << "  --seed N                Random seed, >= 0 (default: " << default_seed << ")\n"
            << "  --save-every N          Save a checkpoint every N epochs (default: "
@@ -177,7 +177,7 @@ std::string format_start_time(const std::chrono::system_clock::time_point& start
 }
 
 std::unique_ptr<ml::Optimizer> make_optimizer(const Options& options) {
-    if (options.optimizer == "cg") return std::make_unique<ml::ConjugateGradient>(options.learning_rate);
+    if (options.optimizer == "cg") return std::make_unique<ml::ConjugateGradient>();
     return std::make_unique<ml::SGD>(options.learning_rate);
 }
 
@@ -310,9 +310,11 @@ int main(int argc, char* argv[]) {
                   << "noise stddev: " << options.noise_stddev << '\n'
                   << "epochs: " << options.epochs << '\n'
                   << "checkpoint interval: " << options.checkpoint_interval << '\n'
-                  << "learning rate: " << options.learning_rate << '\n'
-                  << "weight decay: " << options.weight_decay << '\n'
-                  << "CSV output: " << std::filesystem::absolute(output_directory).string() << '\n';
+                  << "weight decay: " << options.weight_decay << '\n';
+        if (options.optimizer == "sgd") {
+            std::cout << "learning rate: " << options.learning_rate << '\n';
+        }
+        std::cout << "CSV output: " << std::filesystem::absolute(output_directory).string() << '\n';
     } catch (const std::exception& error) {
         std::cerr << "lab1 failed: " << error.what() << '\n';
         return 1;

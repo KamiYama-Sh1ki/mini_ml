@@ -26,7 +26,7 @@ double distance_to_optimum(const std::vector<double>& weights) {
 
 int main() {
     {
-        ml::ConjugateGradient optimizer(0.01);
+        ml::ConjugateGradient optimizer;
         std::vector<double> weights{0.0, 0.0};
         for (int step = 0; step < 20; ++step) {
             optimizer.step(weights, quadratic);
@@ -35,7 +35,7 @@ int main() {
     }
 
     {
-        ml::ConjugateGradient optimizer(0.01);
+        ml::ConjugateGradient optimizer;
         optimizer.reset();
         std::vector<double> weights{0.0, 0.0};
         optimizer.step(weights, quadratic);
@@ -62,21 +62,13 @@ int main() {
     }
 
     {
-        try {
-            static_cast<void>(ml::ConjugateGradient(0.0));
-            assert(false);
-        } catch (const std::invalid_argument&) {
-        }
-    }
-
-    {
         ml::SGD sgd(0.01);
         std::vector<double> sgd_weights{0.0, 0.0};
         for (int step = 0; step < 100; ++step) {
             sgd.step(sgd_weights, quadratic);
         }
 
-        ml::ConjugateGradient optimizer(0.01);
+        ml::ConjugateGradient optimizer;
         std::vector<double> cg_weights{0.0, 0.0};
         for (int step = 0; step < 100; ++step) {
             optimizer.step(cg_weights, quadratic);

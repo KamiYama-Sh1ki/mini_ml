@@ -103,7 +103,7 @@ int main() {
     }
 
     {
-        ml::ConjugateGradient optimizer(0.1);
+        ml::ConjugateGradient optimizer;
         ml::Trainer trainer(full_objective, {}, optimizer, ml::Sampling::full_batch);
         std::vector<double> weights(3, 0.0);
         trainer.train(weights, 50, 50, ml::TrainHooks{});

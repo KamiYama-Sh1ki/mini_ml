@@ -14,7 +14,7 @@ usage() {
         "  --degree N            Polynomial degree, including zero (default: 15)" \
         "  --noise X             Noise standard deviation, >= 0 (default: 0.1)" \
         "  --epochs N            Train for N epochs (default: 10000)" \
-        "  --learning-rate X     Positive learning rate (default: 0.01)" \
+        "  --learning-rate X     Positive learning rate, used by sgd only (default: 0.01)" \
         "  --weight-decay X      L2 weight decay, >= 0, w0 exempt (default: 0)" \
         "  --seed N              Random seed, >= 0 (default: 42)" \
         "  --save-every N        Save a C++ checkpoint every N epochs (default: 1000)" \

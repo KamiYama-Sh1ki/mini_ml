@@ -55,17 +55,17 @@ private:
 };
 
 // Fletcher-Reeves conjugate gradient for objectives that are quadratic in the
-// weights. Each step evaluates the objective at the current point and at one
-// probe point along the new direction; the curvature recovered from the two
-// gradients yields the exact line-search step, so no extra evaluations are
-// needed. Guards: beta clamped to [0, 1], step size bounded, probe step size
-// reused from the previous exact step.
+// weights. Every step size comes from exact line search: the objective is
+// evaluated at the current point and at one probe point along the new
+// direction, and the curvature recovered from the two gradients yields the
+// optimal step. There is no learning rate; the probe scale only has to land
+// in the finite range (it starts at 1, then reuses the previous exact step
+// and shrinks automatically if the probe leaves the finite range). Guards:
+// beta clamped to [0, 1]; degenerate directions trigger a restart instead of
+// an update.
 class ConjugateGradient final : public Optimizer {
 public:
-    explicit ConjugateGradient(double learning_rate)
-        : learning_rate_(learning_rate), max_step_size_(1.0e6 * learning_rate) {
-        if (!(learning_rate > 0.0)) throw std::invalid_argument("ConjugateGradient: learning_rate must be > 0");
-    }
+    ConjugateGradient() = default;
 
     void step(std::vector<double>& weights, const Objective& objective) override {
         if (!objective) throw std::invalid_argument("ConjugateGradient::step: objective must not be empty");
@@ -77,6 +77,7 @@ public:
 
         double squared_norm = 0.0;
         for (double value : current.gradient) squared_norm += value * value;
+        if (squared_norm == 0.0) return;
 
         double beta = 0.0;
         if (has_previous_state_ && previous_squared_norm_ > 0.0) {
@@ -92,28 +93,34 @@ public:
             direction_dot_gradient += direction_[i] * current.gradient[i];
         }
 
-        const double probe_alpha =
-            (has_previous_state_ && last_step_size_ > 0.0 && std::isfinite(last_step_size_))
-                ? last_step_size_
-                : learning_rate_;
-        probe_weights_.resize(weights.size());
-        for (std::size_t i = 0; i < weights.size(); ++i) {
-            probe_weights_[i] = weights[i] + probe_alpha * direction_[i];
+        double probe_scale = 1.0;
+        if (has_previous_state_ && last_step_size_ > 0.0 && std::isfinite(last_step_size_)) {
+            probe_scale = last_step_size_;
         }
-        const TrainResult probed = objective(probe_weights_);
+
+        TrainResult probed;
+        for (int attempt = 0;; ++attempt) {
+            probe_weights_.resize(weights.size());
+            for (std::size_t i = 0; i < weights.size(); ++i) {
+                probe_weights_[i] = weights[i] + probe_scale * direction_[i];
+            }
+            probed = objective(probe_weights_);
+            bool finite = std::isfinite(probed.loss);
+            for (double value : probed.gradient) finite = finite && std::isfinite(value);
+            if (finite || attempt >= 40) break;
+            probe_scale *= 1.0e-3;
+        }
 
         double direction_dot_dg = 0.0;
         for (std::size_t i = 0; i < weights.size(); ++i) {
             direction_dot_dg += direction_[i] * (probed.gradient[i] - current.gradient[i]);
         }
-        const double direction_dot_hessian_direction = direction_dot_dg / probe_alpha;
+        const double curvature = direction_dot_dg / probe_scale;
 
-        double alpha = probe_alpha;
-        if (direction_dot_hessian_direction > 0.0) {
-            alpha = -direction_dot_gradient / direction_dot_hessian_direction;
-        }
-        if (!(alpha > 0.0) || !std::isfinite(alpha) || alpha > max_step_size_) {
-            alpha = probe_alpha;
+        const double alpha = -direction_dot_gradient / curvature;
+        if (!(curvature > 0.0) || !(alpha > 0.0) || !std::isfinite(alpha)) {
+            reset();
+            return;
         }
 
         for (std::size_t i = 0; i < weights.size(); ++i) {
@@ -134,8 +141,6 @@ public:
     }
 
 private:
-    double learning_rate_;
-    double max_step_size_;
     std::vector<double> direction_;
     std::vector<double> probe_weights_;
     double previous_squared_norm_ = 0.0;
