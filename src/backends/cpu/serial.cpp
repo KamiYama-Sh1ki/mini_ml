@@ -4,14 +4,18 @@
 
 namespace ml {
 
-TrainResult SerialBackend::compute_loss_and_gradient(const PolynomialRegression& model, const Dataset1D& data, const MSELoss& loss) const {
+TrainResult SerialBackend::compute_loss_and_gradient(const std::vector<double>& weights, const Dataset1D& data, const MSELoss& loss) const {
+    if (weights.empty()) throw std::invalid_argument("SerialBackend: weights must not be empty");
     if (data.empty()) throw std::invalid_argument("SerialBackend: dataset must not be empty");
 
     TrainResult result;
-    result.gradient.assign(model.weights().size(), 0.0);
+    result.gradient.assign(weights.size(), 0.0);
 
     for (const auto& sample : data.samples) {
-        double prediction = model.predict(sample.x);
+        double prediction = 0.0;
+        for (auto it = weights.rbegin(); it != weights.rend(); ++it) {
+            prediction = prediction * sample.x + *it;
+        }
         result.loss += loss.value(prediction, sample.y);
 
         double prediction_gradient = loss.gradient(prediction, sample.y);

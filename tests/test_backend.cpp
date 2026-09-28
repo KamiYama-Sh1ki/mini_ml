@@ -8,9 +8,6 @@
 #include <ml/runtime/serial.hpp>
 
 int main() {
-    ml::PolynomialRegression model(2);
-    model.weights() = {1.0, 2.0, 3.0};
-
     ml::Dataset1D data{
         {
             {0.0, 2.0},
@@ -20,52 +17,69 @@ int main() {
     };
 
     ml::MSELoss loss;
-    assert(std::abs(loss.value(4.0, 1.0) - 9.0) < 1e-12);
-    assert(std::abs(loss.gradient(4.0, 1.0) - 6.0) < 1e-12);
+    assert(std::abs(loss.value(4.0, 1.0) - 4.5) < 1e-12);
+    assert(std::abs(loss.gradient(4.0, 1.0) - 3.0) < 1e-12);
 
     ml::SerialBackend backend;
-    ml::TrainResult result = backend.compute_loss_and_gradient(model, data, loss);
+    std::vector<double> weights{1.0, 2.0, 3.0};
+    ml::TrainResult result = backend.compute_loss_and_gradient(weights, data, loss);
 
-    assert(std::abs(result.loss - 2.0) < 1e-12);
+    assert(std::abs(result.loss - 1.0) < 1e-12);
     assert(result.gradient.size() == 3);
-    assert(std::abs(result.gradient[0] - 4.0 / 3.0) < 1e-12);
-    assert(std::abs(result.gradient[1] + 2.0 / 3.0) < 1e-12);
-    assert(std::abs(result.gradient[2] - 2.0) < 1e-12);
-    assert(model.weights() == std::vector<double>({1.0, 2.0, 3.0}));
+    assert(std::abs(result.gradient[0] - 2.0 / 3.0) < 1e-12);
+    assert(std::abs(result.gradient[1] + 1.0 / 3.0) < 1e-12);
+    assert(std::abs(result.gradient[2] - 1.0) < 1e-12);
+    assert(weights == std::vector<double>({1.0, 2.0, 3.0}));
 
     bool thrown = false;
     try {
-        backend.compute_loss_and_gradient(model, ml::Dataset1D{}, loss);
+        backend.compute_loss_and_gradient(weights, ml::Dataset1D{}, loss);
     } catch (const std::invalid_argument&) {
         thrown = true;
     }
     assert(thrown);
 
-    std::vector<double> weights{1.0, -2.0};
-    ml::SGD optimizer(0.1, 0.01);
-    optimizer.step(weights, {0.5, -0.25});
-    assert(std::abs(weights[0] - 0.949) < 1e-12);
-    assert(std::abs(weights[1] + 1.973) < 1e-12);
+    thrown = false;
+    try {
+        backend.compute_loss_and_gradient({}, data, loss);
+    } catch (const std::invalid_argument&) {
+        thrown = true;
+    }
+    assert(thrown);
+
+    {
+        ml::SGD optimizer(0.1);
+        std::vector<double> updated{1.0, -2.0};
+        ml::Objective constant_gradient = [](const std::vector<double>&) {
+            return ml::TrainResult{0.0, {0.5, -0.25}};
+        };
+        optimizer.step(updated, constant_gradient);
+        assert(std::abs(updated[0] - 0.95) < 1e-12);
+        assert(std::abs(updated[1] + 1.975) < 1e-12);
+
+        thrown = false;
+        try {
+            optimizer.step(updated, nullptr);
+        } catch (const std::invalid_argument&) {
+            thrown = true;
+        }
+        assert(thrown);
+
+        thrown = false;
+        try {
+            ml::Objective mismatched = [](const std::vector<double>&) {
+                return ml::TrainResult{0.0, {1.0}};
+            };
+            optimizer.step(updated, mismatched);
+        } catch (const std::invalid_argument&) {
+            thrown = true;
+        }
+        assert(thrown);
+    }
 
     thrown = false;
     try {
         static_cast<void>(ml::SGD(0.0));
-    } catch (const std::invalid_argument&) {
-        thrown = true;
-    }
-    assert(thrown);
-
-    thrown = false;
-    try {
-        static_cast<void>(ml::SGD(0.1, -0.01));
-    } catch (const std::invalid_argument&) {
-        thrown = true;
-    }
-    assert(thrown);
-
-    thrown = false;
-    try {
-        optimizer.step(weights, {1.0});
     } catch (const std::invalid_argument&) {
         thrown = true;
     }

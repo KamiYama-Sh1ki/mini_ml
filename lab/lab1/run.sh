@@ -9,15 +9,15 @@ python_executable="${MINI_ML_PYTHON:-$HOME/miniconda3/envs/mini_ml/bin/python}"
 usage() {
     printf '%s\n' \
         "Usage: $0 [options] [checkpoint epochs...]" \
-        "  --optimizer NAME      Optimizer binary to run: sgd or cg (default: sgd)" \
-        "  --samples N           Number of noisy samples (default: 100)" \
-        "  --degree N            Polynomial degree, including zero (default: 9)" \
+        "  --optimizer NAME      sgd (stochastic, per-sample) or cg (default: sgd)" \
+        "  --samples N           Number of noisy samples (default: 9)" \
+        "  --degree N            Polynomial degree, including zero (default: 15)" \
         "  --noise X             Noise standard deviation, >= 0 (default: 0.1)" \
-        "  --epochs N            Train for N epochs (default: 1000)" \
-        "  --learning-rate X     Positive SGD learning rate (default: 0.1)" \
-        "  --weight-decay X      L2 weight decay, >= 0 (default: 0.001)" \
+        "  --epochs N            Train for N epochs (default: 10000)" \
+        "  --learning-rate X     Positive learning rate (default: 0.01)" \
+        "  --weight-decay X      L2 weight decay, >= 0, w0 exempt (default: 0)" \
         "  --seed N              Random seed, >= 0 (default: 42)" \
-        "  --save-every N        Save a C++ checkpoint every N epochs (default: 200)" \
+        "  --save-every N        Save a C++ checkpoint every N epochs (default: 1000)" \
         "  --plot-every N        Plot every N epochs (N must be a multiple of --save-every)" \
         "  --plot-every default" \
         "                        Plot at the C++ checkpoint frequency (default)" \
@@ -42,8 +42,6 @@ training_arguments=()
 plot_epochs=()
 plot_every="default"
 plot_every_set=false
-optimizer="sgd"
-lab1_target=lab1_polynomial
 
 while (( $# > 0 )); do
     case "$1" in
@@ -53,16 +51,12 @@ while (( $# > 0 )); do
                 usage >&2
                 exit 2
             fi
-            case "$2" in
-                sgd) lab1_target=lab1_polynomial ;;
-                cg) lab1_target=lab1_polynomial_cg ;;
-                *)
-                    printf '%s requires sgd or cg, got %q\n' "$1" "$2" >&2
-                    usage >&2
-                    exit 2
-                    ;;
-            esac
-            optimizer="$2"
+            if [[ "$2" != sgd && "$2" != cg ]]; then
+                printf '%s requires sgd or cg, got %q\n' "$1" "$2" >&2
+                usage >&2
+                exit 2
+            fi
+            training_arguments+=("$1" "$2")
             shift 2
             ;;
         --samples|--epochs|--save-every|--checkpoint-interval)
@@ -158,8 +152,8 @@ fi
 
 cd "$project_directory"
 cmake -S "$project_directory" -B "$build_directory"
-cmake --build "$build_directory" --target "$lab1_target"
-"$build_directory/$lab1_target" "${training_arguments[@]}"
+cmake --build "$build_directory" --target lab1_polynomial
+"$build_directory/lab1_polynomial" "${training_arguments[@]}"
 
 if (( ${#plot_epochs[@]} > 0 )); then
     "$python_executable" "$script_directory/plot.py" "${plot_epochs[@]}"

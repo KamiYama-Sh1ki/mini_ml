@@ -87,13 +87,18 @@ add_test(
     COMMAND test_conjugate_gradient
 )
 
-add_executable(lab1_polynomial_cg
-    lab/lab1/main_cg.cpp
+add_executable(test_trainer
+    tests/test_trainer.cpp
 )
 
-target_link_libraries(lab1_polynomial_cg
+target_link_libraries(test_trainer
     PRIVATE
         mini_ml
+)
+
+add_test(
+    NAME trainer
+    COMMAND test_trainer
 )
 
 add_executable(lab1_polynomial

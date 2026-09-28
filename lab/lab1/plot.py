@@ -6,7 +6,22 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from matplotlib import font_manager, pyplot as plt
+
+WINDOWS_CJK_FONTS = (
+    "/mnt/c/Windows/Fonts/msyh.ttc",
+    "/mnt/c/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+)
+
+
+def load_cjk_font():
+    for path in WINDOWS_CJK_FONTS:
+        if Path(path).exists():
+            font_manager.fontManager.addfont(path)
+            return font_manager.FontProperties(fname=path).get_name()
+    return None
 
 
 REQUIRED_FILES = (
@@ -296,9 +311,13 @@ def regression_metrics(true_values, predicted_values):
 
 
 def plot_fit(run_directory, sample_x, sample_y, curve_x, true_y, predictions):
+    font_name = load_cjk_font()
+    if font_name:
+        plt.rcParams["font.family"] = font_name
+        plt.rcParams["axes.unicode_minus"] = False
     figure, axes = plt.subplots(figsize=(9, 6))
-    axes.scatter(sample_x, sample_y, s=22, alpha=0.65, label="Noisy samples")
-    axes.plot(curve_x, true_y, linewidth=2, label="True sine curve")
+    axes.scatter(sample_x, sample_y, s=22, alpha=0.65, label="含噪声的训练样本")
+    axes.plot(curve_x, true_y, linewidth=2, label="真实曲线 sin(πx)")
     for label, predicted_y in predictions:
         r_squared, _, _ = regression_metrics(true_y, predicted_y)
         axes.plot(curve_x, predicted_y, linewidth=2, label=f"{label} (R²={r_squared:.4f})")
@@ -308,7 +327,7 @@ def plot_fit(run_directory, sample_x, sample_y, curve_x, true_y, predictions):
     data_max = max(max(sample_y), max(true_y))
     data_range = data_max - data_min
     axes.set_ylim(data_min - 0.5 * data_range, data_max + 0.5 * data_range)
-    axes.set_title("Polynomial Regression Fit")
+    axes.set_title("多项式拟合随训练轮数的演化")
     axes.set_xlabel("x")
     axes.set_ylabel("y")
     axes.grid(True, alpha=0.3)
