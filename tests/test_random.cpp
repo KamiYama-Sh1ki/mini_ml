@@ -7,7 +7,6 @@
 #include <ml/core/random.hpp>
 
 int main() {
-    // 1. 相同 seed 应产生相同随机序列
     {
         ml::RandomGenerator rng1(42);
         ml::RandomGenerator rng2(42);
@@ -18,7 +17,6 @@ int main() {
         }
     }
 
-    // 2. uniform_double() 生成的数应该落在区间内
     {
         ml::RandomGenerator rng(123);
 
@@ -30,7 +28,6 @@ int main() {
         }
     }
 
-    // 3. uniform_int() 生成的整数应该落在闭区间 [left, right]
     {
         ml::RandomGenerator rng(456);
 
@@ -42,7 +39,6 @@ int main() {
         }
     }
 
-    // 4. reseed() 后应该重新产生同样的序列
     {
         ml::RandomGenerator rng(42);
 
@@ -58,7 +54,6 @@ int main() {
         assert(a2 == b2);
     }
 
-    // 5. uniform_double() 非法区间应该抛异常
     {
         ml::RandomGenerator rng(42);
 
@@ -73,7 +68,6 @@ int main() {
         assert(thrown);
     }
 
-    // 6. uniform_int() 非法区间应该抛异常
     {
         ml::RandomGenerator rng(42);
 
@@ -88,7 +82,6 @@ int main() {
         assert(thrown);
     }
 
-    // 7. normal() 的 stddev 不能小于 0
     {
         ml::RandomGenerator rng(42);
 

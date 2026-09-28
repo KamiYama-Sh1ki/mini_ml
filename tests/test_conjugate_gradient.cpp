@@ -8,8 +8,6 @@
 
 namespace {
 
-// J(w) = 0.5 * ((w0 - 1)^2 + 100 * (w1 - 0.2)^2), optimum at (1, 0.2),
-// condition number 100. Exact line search should finish it in ~2 steps.
 ml::TrainResult quadratic(const std::vector<double>& weights) {
     const double dx = weights[0] - 1.0;
     const double dy = weights[1] - 0.2;

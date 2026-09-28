@@ -10,10 +10,6 @@
 
 namespace ml {
 
-// Callable that evaluates the training objective at arbitrary weights and
-// returns the loss together with its gradient. Built by the caller (for
-// example from a backend plus dataset); optimizers may evaluate it several
-// times per step, which is what enables line-search style methods.
 using Objective = std::function<TrainResult(const std::vector<double>& weights)>;
 
 class Optimizer {
@@ -26,10 +22,6 @@ protected:
     Optimizer() = default;
 };
 
-// Stochastic gradient step: one evaluation, one update. Intended to be driven
-// with a per-sample (or mini-batch) objective; works with the full-batch
-// objective as plain gradient descent. Weight decay, if any, must already be
-// part of the objective.
 class SGD final : public Optimizer {
 public:
     explicit SGD(double learning_rate)
@@ -54,15 +46,6 @@ private:
     double learning_rate_;
 };
 
-// Fletcher-Reeves conjugate gradient for objectives that are quadratic in the
-// weights. Every step size comes from exact line search: the objective is
-// evaluated at the current point and at one probe point along the new
-// direction, and the curvature recovered from the two gradients yields the
-// optimal step. There is no learning rate; the probe scale only has to land
-// in the finite range (it starts at 1, then reuses the previous exact step
-// and shrinks automatically if the probe leaves the finite range). Guards:
-// beta clamped to [0, 1]; degenerate directions trigger a restart instead of
-// an update.
 class ConjugateGradient final : public Optimizer {
 public:
     ConjugateGradient() = default;

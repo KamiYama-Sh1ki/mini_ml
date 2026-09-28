@@ -1,4 +1,3 @@
-//random.hpp
 #pragma once
 
 #include <cstdint>
@@ -55,4 +54,4 @@ private:
     std::mt19937_64 engine_;
 };
 
-} // namespace ml
+}

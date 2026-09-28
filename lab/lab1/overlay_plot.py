@@ -41,6 +41,10 @@ def parse_args():
     parser.add_argument("run_dirs", type=Path, nargs="+", help="run directories (same samples)")
     parser.add_argument("--labels", nargs="+", default=None, help="legend label per run")
     parser.add_argument("--title", default="不同正则化强度 λ 的拟合结果对比")
+    parser.add_argument("--scatter-dir", type=Path, default=None,
+                        help="run directory whose samples are scattered (default: the first run)")
+    parser.add_argument("--no-samples", action="store_true",
+                        help="omit the sample scatter, drawing fitted curves only")
     parser.add_argument("--output", type=Path, required=True, help="output PNG path")
     return parser.parse_args()
 
@@ -55,7 +59,9 @@ def main():
         raise SystemExit("number of labels must match number of run directories")
 
     figure, axis = plt.subplots(figsize=(9, 6))
-    sample_x, sample_y = read_columns(args.run_dirs[0] / "samples.csv", ("x", "y"))
+    sample_source = args.scatter_dir if args.scatter_dir else args.run_dirs[0]
+    if not args.no_samples:
+        sample_x, sample_y = read_columns(sample_source / "samples.csv", ("x", "y"))
     curve_x, curve_true = read_columns(args.run_dirs[0] / "curve.csv", ("x", "y_true"))
 
     for run_dir, label in zip(
@@ -65,8 +71,9 @@ def main():
         mse = mean_squared_error(curve_true, curve_pred)
         axis.plot(curve_x, curve_pred, linewidth=1.8, label=f"{label} (测试MSE={mse:.3f})")
 
-    axis.scatter(sample_x, sample_y, facecolors="none", edgecolors="dimgray", s=42,
-                 zorder=3, label="含噪声的训练样本")
+    if not args.no_samples:
+        axis.scatter(sample_x, sample_y, facecolors="none", edgecolors="dimgray", s=42,
+                     zorder=3, label="含噪声的训练样本")
     axis.plot(curve_x, curve_true, color="black", linestyle="--", linewidth=1.4,
               zorder=2, label="真实曲线 sin(πx)")
     axis.set_xlim(-1.05, 1.05)

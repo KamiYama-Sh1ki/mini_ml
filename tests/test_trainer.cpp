@@ -11,9 +11,6 @@
 
 namespace {
 
-// Exact data from p(x) = 1 + 2x + 3x^2; ridge closed form with w0 exempt:
-// (A + lambda*I')w = b with A_jk = mean(x^(j+k)), b_j = mean(y*x^j), and
-// I' = diag(0, 1, 1).
 ml::Dataset1D make_data() {
     return ml::Dataset1D{
         {
@@ -53,7 +50,6 @@ std::vector<double> ridge_closed_form(const ml::Dataset1D& data, double lambda) 
     }
     for (std::size_t j = 1; j < m; ++j) a[j * m + j] += lambda;
 
-    // Gaussian elimination with partial pivoting.
     for (std::size_t column = 0; column < m; ++column) {
         std::size_t pivot = column;
         for (std::size_t row = column + 1; row < m; ++row) {

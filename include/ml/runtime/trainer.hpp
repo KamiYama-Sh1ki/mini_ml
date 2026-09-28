@@ -12,9 +12,6 @@
 
 namespace ml {
 
-// Library-side training loop. One epoch means one optimizer step in
-// full-batch mode, or one pass over all sample objectives (in shuffled
-// order) in per-sample mode. Hooks decide what gets logged and where.
 enum class Sampling {
     full_batch,
     per_sample,

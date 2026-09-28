@@ -149,7 +149,6 @@ double true_curve(double x) {
 
 double l2_penalty(const std::vector<double>& weights, double weight_decay) {
     double squared_norm = 0.0;
-    // The constant weight w0 is exempt from the penalty, matching the update rule.
     for (std::size_t i = 1; i < weights.size(); ++i) squared_norm += weights[i] * weights[i];
     return 0.5 * weight_decay * squared_norm;
 }

@@ -1,4 +1,3 @@
-//sample.hpp
 #pragma once
 
 namespace ml {
