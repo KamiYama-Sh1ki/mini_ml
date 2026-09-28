@@ -1,14 +1,7 @@
-#include <cmath>
-#include <cstddef>
-#include <filesystem>
-#include <iostream>
-#include <memory>
-#include <numbers>
-#include <stdexcept>
-#include <string>
-#include <vector>
+#include <bits/stdc++.h>
 
 #include <lab/common/lab_args.hpp>
+#include <lab/common/lab_hooks.hpp>
 #include <lab/common/lab_output.hpp>
 #include <ml/core/random.hpp>
 #include <ml/data/sampling.hpp>
@@ -74,11 +67,8 @@ int main(int argc, char* argv[]) {
         ml::Dataset1D data =
             ml::sample_curve_noisy(true_curve, -1.0, 1.0, options.sample_count, options.noise_stddev, true, rng);
         std::vector<double> weights(options.degree + 1, 0.0);
-
+        run.write_samples("samples.csv", data.samples);
         {
-            auto samples_file = run.csv("samples.csv");
-            samples_file << "x,y\n";
-            for (const auto& sample : data.samples) samples_file << sample.x << ',' << sample.y << '\n';
             auto config_file = run.csv("config.csv");
             args.write_config(config_file);
         }
@@ -101,47 +91,20 @@ int main(int argc, char* argv[]) {
         auto optimizer = make_optimizer(options);
         const ml::Sampling sampling = options.optimizer == "cg" ? ml::Sampling::full_batch : ml::Sampling::per_sample;
         ml::Trainer trainer(full_objective, std::move(sample_objectives), *optimizer, sampling);
+        auto penalty = [&decay](const std::vector<double>& w) { return l2_penalty(w, decay); };
+        auto hooks = lab::csv_hooks(run, weights, weights.size(), full_objective, penalty);
+        const ml::TrainResult result =
+            trainer.train(weights, options.epochs, options.checkpoint_interval, hooks, &rng);
 
-        ml::TrainResult result;
-        {
-            auto loss_file = run.csv("loss.csv");
-            auto checkpoints_file = run.csv("checkpoints.csv");
-            loss_file << "epoch,loss,l2_penalty,objective_loss\n";
-            checkpoints_file << "epoch,loss,l2_penalty,objective_loss";
-            for (std::size_t i = 0; i < weights.size(); ++i) checkpoints_file << ",w" << i;
-            for (std::size_t i = 0; i < weights.size(); ++i) checkpoints_file << ",gradient" << i;
-            checkpoints_file << '\n';
+        run.write_curve("curve.csv", true_curve,
+                        [&weights](double x) {
+                            double y = 0.0;
+                            for (auto it = weights.rbegin(); it != weights.rend(); ++it) y = y * x + *it;
+                            return y;
+                        },
+                        curve_point_count, -1.0, 1.0);
 
-            ml::TrainHooks hooks;
-            hooks.on_epoch = [&](std::size_t epoch, const ml::TrainResult& epoch_result) {
-                const double penalty = l2_penalty(weights, decay);
-                loss_file << epoch << ',' << epoch_result.loss - penalty << ',' << penalty << ','
-                          << epoch_result.loss << '\n';
-            };
-            hooks.on_checkpoint = [&](std::size_t epoch, const std::vector<double>& epoch_weights) {
-                const ml::TrainResult epoch_result = full_objective(epoch_weights);
-                const double penalty = l2_penalty(epoch_weights, decay);
-                checkpoints_file << epoch << ',' << epoch_result.loss - penalty << ',' << penalty << ','
-                                 << epoch_result.loss;
-                for (double weight : epoch_weights) checkpoints_file << ',' << weight;
-                for (double value : epoch_result.gradient) checkpoints_file << ',' << value;
-                checkpoints_file << '\n';
-            };
-            result = trainer.train(weights, options.epochs, options.checkpoint_interval, hooks, &rng);
-        }
-
-        {
-            auto curve_file = run.csv("curve.csv");
-            curve_file << "x,y_true,y_pred\n";
-            for (int i = 0; i < curve_point_count; ++i) {
-                const double x = -1.0 + 2.0 * static_cast<double>(i) / static_cast<double>(curve_point_count - 1);
-                double y_pred = 0.0;
-                for (auto it = weights.rbegin(); it != weights.rend(); ++it) y_pred = y_pred * x + *it;
-                curve_file << x << ',' << true_curve(x) << ',' << y_pred << '\n';
-            }
-        }
-
-        const double final_penalty = l2_penalty(weights, decay);
+        const double final_penalty = penalty(weights);
         std::cout << "final loss: " << result.loss - final_penalty << '\n'
                   << "final L2 penalty: " << final_penalty << '\n'
                   << "final objective loss: " << result.loss << '\n';

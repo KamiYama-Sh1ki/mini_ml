@@ -40,6 +40,24 @@ public:
         return file;
     }
 
+    template <typename Samples>
+    void write_samples(std::string_view name, const Samples& samples) const {
+        auto file = csv(name);
+        file << "x,y\n";
+        for (const auto& sample : samples) file << sample.x << ',' << sample.y << '\n';
+    }
+
+    template <typename Truth, typename Predict>
+    void write_curve(std::string_view name, Truth truth, Predict predict, int points, double left,
+                     double right) const {
+        auto file = csv(name);
+        file << "x,y_true,y_pred\n";
+        for (int i = 0; i < points; ++i) {
+            const double x = left + (right - left) * static_cast<double>(i) / static_cast<double>(points - 1);
+            file << x << ',' << truth(x) << ',' << predict(x) << '\n';
+        }
+    }
+
 private:
     std::filesystem::path directory_;
 };
