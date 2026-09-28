@@ -31,8 +31,8 @@ double true_curve(double x) {
 }
 
 double l2_penalty(const std::vector<double>& weights, double weight_decay) {
-    double squared_norm = 0.0;
-    for (std::size_t i = 1; i < weights.size(); ++i) squared_norm += weights[i] * weights[i];
+    const double squared_norm = std::accumulate(std::next(weights.begin()), weights.end(), 0.0,
+                                                [](double sum, double weight) { return sum + weight * weight; });
     return 0.5 * weight_decay * squared_norm;
 }
 
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
         run.write_curve("curve.csv", true_curve,
                         [&weights](double x) {
                             double y = 0.0;
-                            for (auto it = weights.rbegin(); it != weights.rend(); ++it) y = y * x + *it;
+                            for (double coefficient : std::views::reverse(weights)) y = y * x + coefficient;
                             return y;
                         },
                         curve_point_count, -1.0, 1.0);
