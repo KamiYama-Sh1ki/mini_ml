@@ -146,6 +146,26 @@ inline ArgSpec arg(std::string_view names, std::string& target, std::string_view
     };
 }
 
+inline ArgSpec arg(std::string_view names, double& target, std::string_view help, ArgOptions options = {}) {
+    return ArgSpec{
+        .names = names,
+        .help = help,
+        .in_summary = options.in_summary,
+        .config_key = options.config_key.empty() ? detail::default_config_key(names) : std::string(options.config_key),
+        .set = [&target, names](std::string_view value) {
+            double parsed = 0.0;
+            const auto [end, error] =
+                std::from_chars(value.data(), value.data() + value.size(), parsed, std::chars_format::general);
+            if (error != std::errc{} || end != value.data() + value.size() || !std::isfinite(parsed)) {
+                throw std::invalid_argument(std::string(names) + " requires a finite number, got '" +
+                                            std::string(value) + "'");
+            }
+            target = parsed;
+        },
+        .value = [&target] { return detail::format_number(target); },
+    };
+}
+
 template <typename Value>
 ArgSpec constant(std::string_view key, Value value) {
     return ArgSpec{
