@@ -114,3 +114,27 @@ target_link_libraries(lab1_polynomial
     PRIVATE
         mini_ml
 )
+
+add_executable(lab2_gen
+    lab/lab2/gen.cpp
+)
+
+target_include_directories(lab2_gen
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(lab2_gen
+    PRIVATE
+        mini_ml
+)
+
+target_include_directories(lab1_polynomial
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(lab1_polynomial
+    PRIVATE
+        mini_ml
+)
