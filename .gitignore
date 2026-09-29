@@ -25,6 +25,7 @@ install_manifest.txt
 
 # Generated lab data and plots
 /lab/lab*/output/
+/lab/lab*/data/
 
 # Python
 __pycache__/

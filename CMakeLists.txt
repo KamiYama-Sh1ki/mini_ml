@@ -119,6 +119,20 @@ add_executable(lab2_gen
     lab/lab2/gen.cpp
 )
 
+add_executable(lab2_logistic
+    lab/lab2/main.cpp
+)
+
+target_include_directories(lab2_logistic
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(lab2_logistic
+    PRIVATE
+        mini_ml
+)
+
 target_include_directories(lab2_gen
     PRIVATE
         ${PROJECT_SOURCE_DIR}

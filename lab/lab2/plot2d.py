@@ -33,30 +33,30 @@ def read_rows(path):
         return list(csv.DictReader(file))
 
 
-def select_run_directory(explicit):
-    if explicit:
-        return Path(explicit)
-    base = Path(__file__).resolve().parent / "output"
-    runs = sorted(p for p in base.iterdir() if p.is_dir() and (p / "samples.csv").exists())
+def select_directory(base, marker):
+    runs = sorted(p for p in base.iterdir() if p.is_dir() and (p / marker).exists())
     if not runs:
-        raise SystemExit("no lab2 run found under output/")
+        raise SystemExit(f"no run containing {marker} under {base}")
     return runs[-1]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-dir", default=None)
+    parser.add_argument("--data-dir", default=None, help="directory with samples.csv/centers.csv")
+    parser.add_argument("--run-dir", default=None, help="training directory with checkpoints.csv/loss.csv")
     args = parser.parse_args()
 
-    run = select_run_directory(args.run_dir)
+    root = Path(__file__).resolve().parent
+    data_run = Path(args.data_dir) if args.data_dir else select_directory(root / "data", "samples.csv")
+    train_run = Path(args.run_dir) if args.run_dir else select_directory(root / "output", "checkpoints.csv")
     font_name = load_cjk_font()
     if font_name:
         plt.rcParams["font.family"] = font_name
     plt.rcParams["axes.unicode_minus"] = False
 
-    samples = read_rows(run / "samples.csv")
-    centers = read_rows(run / "centers.csv")
-    checkpoints = read_rows(run / "checkpoints.csv")
+    samples = read_rows(data_run / "samples.csv")
+    centers = read_rows(data_run / "centers.csv")
+    checkpoints = read_rows(train_run / "checkpoints.csv")
     x1 = np.array([float(r["x0"]) for r in samples])
     x2 = np.array([float(r["x1"]) for r in samples])
     labels = np.array([int(r["label"]) for r in samples])
@@ -95,10 +95,10 @@ def main():
     axis.legend(loc="lower left", fontsize=9, framealpha=0.9)
     axis.grid(True, alpha=0.2)
     figure.tight_layout()
-    figure.savefig(run / "boundary.png", dpi=150)
+    figure.savefig(train_run / "boundary.png", dpi=150)
     plt.close(figure)
 
-    loss_rows = read_rows(run / "loss.csv")
+    loss_rows = read_rows(train_run / "loss.csv")
     epochs = [int(r["epoch"]) for r in loss_rows]
     losses = [float(r["loss"]) for r in loss_rows]
     figure, axis = plt.subplots(figsize=(8, 5))
@@ -108,13 +108,13 @@ def main():
     axis.set_title("SGD 训练损失", fontsize=12)
     axis.grid(True, alpha=0.25)
     figure.tight_layout()
-    figure.savefig(run / "loss.png", dpi=150)
+    figure.savefig(train_run / "loss.png", dpi=150)
     plt.close(figure)
 
     print(f"accuracy: {accuracy:.4f}")
     print(f"weights: w0={w0:.4f} w1={w1:.4f} w2={w2:.4f}")
-    print(f"generated: {run / 'boundary.png'}")
-    print(f"generated: {run / 'loss.png'}")
+    print(f"generated: {train_run / 'boundary.png'}")
+    print(f"generated: {train_run / 'loss.png'}")
 
 
 if __name__ == "__main__":
