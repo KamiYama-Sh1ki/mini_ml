@@ -19,13 +19,33 @@ std::vector<std::vector<double>> roll_centers(int dim, double center_min, double
     return centers;
 }
 
+std::vector<double> roll_direction(int dim, ml::RandomGenerator& rng) {
+    std::vector<double> u(dim);
+    double norm = 0.0;
+    for (int i = 0; i < dim; ++i) {
+        u[i] = rng.normal(0.0, 1.0);
+        norm += u[i] * u[i];
+    }
+    norm = std::sqrt(norm);
+    for (double& coordinate : u) coordinate /= norm;
+    return u;
+}
+
 std::vector<Sample> sample_gaussian(const std::vector<std::vector<double>>& centers, int per_class, double sigma,
+                                    double elongation, const std::vector<std::vector<double>>& directions,
                                     ml::RandomGenerator& rng) {
     std::vector<Sample> data;
     for (int label = 0; label < 2; ++label)
         for (int i = 0; i < per_class; ++i) {
-            std::vector<double> x(centers[label].size());
-            for (std::size_t j = 0; j < x.size(); ++j) x[j] = centers[label][j] + rng.normal(0.0, sigma);
+            std::vector<double> z(centers[label].size());
+            double projection = 0.0;
+            for (std::size_t j = 0; j < z.size(); ++j) {
+                z[j] = rng.normal(0.0, 1.0);
+                projection += z[j] * directions[label][j];
+            }
+            std::vector<double> x(z.size());
+            for (std::size_t j = 0; j < x.size(); ++j)
+                x[j] = centers[label][j] + sigma * (z[j] + (elongation - 1.0) * projection * directions[label][j]);
             data.push_back(Sample{std::move(x), label});
         }
     return data;
@@ -38,6 +58,7 @@ int main(int argc, char* argv[]) {
         int dim = 2;
         int per_class = 60;
         double sigma = 0.3;
+        double elongation = 1.0;
         double center_min = -1.0;
         double center_max = 1.0;
         std::uint64_t seed = 42;
@@ -45,6 +66,7 @@ int main(int argc, char* argv[]) {
         args.add(lab::arg("--dim", dim, false, "feature dimension"));
         args.add(lab::arg("--samples", per_class, false, "samples per class", {.config_key = "per_class"}));
         args.add(lab::arg("--sigma", sigma, true, "gaussian noise stddev"));
+        args.add(lab::arg("--elong", elongation, true, "cluster stretch along a random orientation (1 = round)"));
         args.add(lab::arg("--min", center_min, "center roll lower bound", {.config_key = "center_min"}));
         args.add(lab::arg("--max", center_max, "center roll upper bound", {.config_key = "center_max"}));
         args.add(lab::arg("--seed", seed, true, "random seed"));
@@ -59,7 +81,8 @@ int main(int argc, char* argv[]) {
         lab::RunOutput run("lab/lab2/data");
         ml::RandomGenerator rng(seed);
         const std::vector<std::vector<double>> centers = roll_centers(dim, center_min, center_max, rng);
-        const std::vector<Sample> data = sample_gaussian(centers, per_class, sigma, rng);
+        std::vector<std::vector<double>> directions = {roll_direction(dim, rng), roll_direction(dim, rng)};
+        const std::vector<Sample> data = sample_gaussian(centers, per_class, sigma, elongation, directions, rng);
 
         {
             auto samples_file = run.csv("samples.csv");
