@@ -75,15 +75,23 @@ ml::TrainResult evaluate(const std::vector<double>& w, const std::vector<Sample>
 
 }  // namespace
 
+std::unique_ptr<ml::Optimizer> make_optimizer(const std::string& name, double learning_rate) {
+    if (name == "newton") return std::make_unique<ml::NewtonCG>();
+    if (name == "cg") return std::make_unique<ml::ConjugateGradient>();
+    return std::make_unique<ml::SGD>(learning_rate);
+}
+
 int main(int argc, char* argv[]) {
     try {
         std::string data_path;
+        std::string optimizer = "sgd";
         std::uint64_t seed = 42;
         std::size_t epochs = 200;
         double learning_rate = 0.1;
         double weight_decay = 0.0;
         std::size_t checkpoint_interval = 50;
         lab::ArgParser args;
+        args.add(lab::arg("--optimizer", optimizer, {"sgd", "cg", "newton"}, "sgd (per-sample), cg or newton (full-batch)"));
         args.add(lab::arg("--data", data_path, "path to samples.csv (default: latest under lab/lab2/data)"));
         args.add(lab::arg("--seed", seed, true, "random seed"));
         args.add(lab::arg("--epochs", epochs, false, "number of training epochs"));
@@ -124,8 +132,9 @@ int main(int argc, char* argv[]) {
         for (const Sample& sample : data) sample_objectives.push_back(make_objective({sample}));
 
         ml::RandomGenerator rng(seed);
-        ml::SGD optimizer(learning_rate);
-        ml::Trainer trainer(full_objective, std::move(sample_objectives), optimizer, ml::Sampling::per_sample);
+        auto optimizer_ptr = make_optimizer(optimizer, learning_rate);
+        const ml::Sampling sampling = optimizer == "sgd" ? ml::Sampling::per_sample : ml::Sampling::full_batch;
+        ml::Trainer trainer(full_objective, std::move(sample_objectives), *optimizer_ptr, sampling);
         auto penalty = [&decay](const std::vector<double>& w) { return penalty_value(w, decay); };
         auto hooks = lab::csv_hooks(run, weights, weights.size(), full_objective, penalty);
         const ml::TrainResult result = trainer.train(weights, epochs, checkpoint_interval, hooks, &rng);

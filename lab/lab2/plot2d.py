@@ -55,6 +55,8 @@ def main():
     plt.rcParams["axes.unicode_minus"] = False
 
     samples = read_rows(data_run / "samples.csv")
+    if "x2" in samples[0]:
+        raise SystemExit("data is 3D; use plot3d.py instead")
     centers = read_rows(data_run / "centers.csv")
     checkpoints = read_rows(train_run / "checkpoints.csv")
     x1 = np.array([float(r["x0"]) for r in samples])

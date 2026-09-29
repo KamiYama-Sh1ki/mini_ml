@@ -115,6 +115,20 @@ target_link_libraries(lab1_polynomial
         mini_ml
 )
 
+add_executable(test_newton_cg
+    tests/test_newton_cg.cpp
+)
+
+target_include_directories(test_newton_cg
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+)
+
+add_test(
+    NAME newton_cg
+    COMMAND test_newton_cg
+)
+
 add_executable(lab2_gen
     lab/lab2/gen.cpp
 )
