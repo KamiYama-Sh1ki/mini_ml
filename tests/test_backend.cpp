@@ -21,7 +21,7 @@ int main() {
     assert(std::abs(loss.gradient(4.0, 1.0) - 3.0) < 1e-12);
 
     ml::SerialBackend backend;
-    std::vector<double> weights{1.0, 2.0, 3.0};
+    ml::Vector weights{1.0, 2.0, 3.0};
     ml::TrainResult result = backend.compute_loss_and_gradient(weights, data, loss);
 
     assert(std::abs(result.loss - 1.0) < 1e-12);
@@ -29,7 +29,7 @@ int main() {
     assert(std::abs(result.gradient[0] - 2.0 / 3.0) < 1e-12);
     assert(std::abs(result.gradient[1] + 1.0 / 3.0) < 1e-12);
     assert(std::abs(result.gradient[2] - 1.0) < 1e-12);
-    assert(weights == std::vector<double>({1.0, 2.0, 3.0}));
+    assert((weights == ml::Vector{1.0, 2.0, 3.0}));
 
     bool thrown = false;
     try {
@@ -49,9 +49,9 @@ int main() {
 
     {
         ml::SGD optimizer(0.1);
-        std::vector<double> updated{1.0, -2.0};
-        ml::Objective constant_gradient = [](const std::vector<double>&) {
-            return ml::TrainResult{0.0, {0.5, -0.25}};
+        ml::Vector updated{1.0, -2.0};
+        ml::Objective constant_gradient = [](const ml::Vector&) {
+            return ml::TrainResult{0.0, ml::Vector{0.5, -0.25}};
         };
         optimizer.step(updated, constant_gradient);
         assert(std::abs(updated[0] - 0.95) < 1e-12);
@@ -67,8 +67,8 @@ int main() {
 
         thrown = false;
         try {
-            ml::Objective mismatched = [](const std::vector<double>&) {
-                return ml::TrainResult{0.0, {1.0}};
+            ml::Objective mismatched = [](const ml::Vector&) {
+                return ml::TrainResult{0.0, ml::Vector{1.0}};
             };
             optimizer.step(updated, mismatched);
         } catch (const std::invalid_argument&) {

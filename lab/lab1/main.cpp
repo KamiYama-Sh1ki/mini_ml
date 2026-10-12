@@ -3,6 +3,7 @@
 #include <lab/common/lab_args.hpp>
 #include <lab/common/lab_hooks.hpp>
 #include <lab/common/lab_output.hpp>
+#include <ml/core/linalg.hpp>
 #include <ml/core/random.hpp>
 #include <ml/data/sampling.hpp>
 #include <ml/opt/loss.hpp>
@@ -30,7 +31,7 @@ double true_curve(double x) {
     return std::sin(std::numbers::pi_v<double> * x);
 }
 
-double l2_penalty(const std::vector<double>& weights, double weight_decay) {
+double l2_penalty(const ml::Vector& weights, double weight_decay) {
     const double squared_norm = std::accumulate(std::next(weights.begin()), weights.end(), 0.0,
                                                 [](double sum, double weight) { return sum + weight * weight; });
     return 0.5 * weight_decay * squared_norm;
@@ -66,7 +67,7 @@ int main(int argc, char* argv[]) {
         ml::RandomGenerator rng(options.seed);
         ml::Dataset1D data =
             ml::sample_curve_noisy(true_curve, -1.0, 1.0, options.sample_count, options.noise_stddev, true, rng);
-        std::vector<double> weights(options.degree + 1, 0.0);
+        ml::Vector weights(options.degree + 1, 0.0);
         run.write_samples("samples.csv", data.samples);
         {
             auto config_file = run.csv("config.csv");
@@ -77,7 +78,7 @@ int main(int argc, char* argv[]) {
         ml::SerialBackend backend;
         const double decay = options.weight_decay;
         auto make_objective = [&backend, &loss, decay](const ml::Dataset1D& dataset) {
-            return ml::Objective([&backend, &loss, dataset, decay](const std::vector<double>& w) {
+            return ml::Objective([&backend, &loss, dataset, decay](const ml::Vector& w) {
                 ml::TrainResult result = backend.compute_loss_and_gradient(w, dataset, loss);
                 result.loss += l2_penalty(w, decay);
                 for (std::size_t i = 1; i < w.size(); ++i) result.gradient[i] += decay * w[i];
@@ -91,7 +92,7 @@ int main(int argc, char* argv[]) {
         auto optimizer = make_optimizer(options);
         const ml::Sampling sampling = options.optimizer == "cg" ? ml::Sampling::full_batch : ml::Sampling::per_sample;
         ml::Trainer trainer(full_objective, std::move(sample_objectives), *optimizer, sampling);
-        auto penalty = [&decay](const std::vector<double>& w) { return l2_penalty(w, decay); };
+        auto penalty = [&decay](const ml::Vector& w) { return l2_penalty(w, decay); };
         auto hooks = lab::csv_hooks(run, weights, weights.size(), full_objective, penalty);
         const ml::TrainResult result =
             trainer.train(weights, options.epochs, options.checkpoint_interval, hooks, &rng);

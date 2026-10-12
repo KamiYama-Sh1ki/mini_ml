@@ -60,7 +60,7 @@ def sigmoid_surface(axis, samples, labels, w, accuracy):
     axis.set_xlabel("x0")
     axis.set_ylabel("x1")
     axis.set_zlabel("P(类别=1)")
-    axis.set_title(f"逻辑回归概率曲面 σ(w·x)(训练精度 = {accuracy:.1%})", fontsize=12)
+    axis.set_title(f"逻辑回归概率曲面 σ(w·x)(测试精度 = {accuracy:.1%})", fontsize=12)
     axis.view_init(elev=24, azim=-60)
 
 
@@ -89,7 +89,7 @@ def decision_plane(axis, samples, labels, w, accuracy):
     axis.set_xlabel("x0")
     axis.set_ylabel("x1")
     axis.set_zlabel("x2")
-    axis.set_title(f"逻辑回归决策平面(3D 特征,训练精度 = {accuracy:.1%})", fontsize=12)
+    axis.set_title(f"逻辑回归决策平面(3D 特征,测试精度 = {accuracy:.1%})", fontsize=12)
     axis.view_init(elev=22, azim=-58)
 
 
@@ -113,6 +113,11 @@ def main():
     checkpoints = read_rows(train_run / "checkpoints.csv")
     weight_count = sum(1 for key in checkpoints[-1] if key.startswith("w") and key[1:].isdigit())
     w = [float(checkpoints[-1][f"w{i}"]) for i in range(weight_count)]
+    if (train_run / "standardizer.csv").exists():
+        scaling = read_rows(train_run / "standardizer.csv")
+        for i, row in enumerate(scaling):
+            w[i + 1] /= float(row["scale"])
+            w[0] -= w[i + 1] * float(row["mean"])
 
     features = len(samples[0]) - 1
     if features == 2:
@@ -121,7 +126,9 @@ def main():
     else:
         x = np.array([[float(r[f"x{i}"]) for i in range(features)] for r in samples])
         z = w[0] + x @ np.array(w[1:])
-    accuracy = np.mean((z >= 0.0).astype(int) == labels)
+    metric_rows = read_rows(train_run / "metrics.csv") if (train_run / "metrics.csv").exists() else []
+    metric = {row["split"]: row for row in metric_rows}
+    accuracy = float(metric.get("test", metric.get("train", {"accuracy": "nan"}))["accuracy"])
 
     figure = plt.figure(figsize=(9.5, 7.5))
     axis = figure.add_subplot(projection="3d")

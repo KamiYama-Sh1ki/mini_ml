@@ -8,13 +8,13 @@
 
 namespace {
 
-ml::TrainResult quadratic(const std::vector<double>& weights) {
+ml::TrainResult quadratic(const ml::Vector& weights) {
     const double dx = weights[0] - 1.0;
     const double dy = weights[1] - 0.2;
-    return ml::TrainResult{0.5 * (dx * dx + 100.0 * dy * dy), {dx, 100.0 * dy}};
+    return ml::TrainResult{0.5 * (dx * dx + 100.0 * dy * dy), ml::Vector{dx, 100.0 * dy}};
 }
 
-double distance_to_optimum(const std::vector<double>& weights) {
+double distance_to_optimum(const ml::Vector& weights) {
     const double dx = weights[0] - 1.0;
     const double dy = weights[1] - 0.2;
     return std::sqrt(dx * dx + dy * dy);
@@ -25,7 +25,7 @@ double distance_to_optimum(const std::vector<double>& weights) {
 int main() {
     {
         ml::ConjugateGradient optimizer;
-        std::vector<double> weights{0.0, 0.0};
+        ml::Vector weights{0.0, 0.0};
         for (int step = 0; step < 20; ++step) {
             optimizer.step(weights, quadratic);
         }
@@ -35,7 +35,7 @@ int main() {
     {
         ml::ConjugateGradient optimizer;
         optimizer.reset();
-        std::vector<double> weights{0.0, 0.0};
+        ml::Vector weights{0.0, 0.0};
         optimizer.step(weights, quadratic);
         assert(distance_to_optimum(weights) < 1.0);
 
@@ -49,8 +49,8 @@ int main() {
 
         thrown = false;
         try {
-            ml::Objective mismatched = [](const std::vector<double>&) {
-                return ml::TrainResult{0.0, {1.0}};
+            ml::Objective mismatched = [](const ml::Vector&) {
+                return ml::TrainResult{0.0, ml::Vector{1.0}};
             };
             optimizer.step(weights, mismatched);
         } catch (const std::invalid_argument&) {
@@ -61,13 +61,13 @@ int main() {
 
     {
         ml::SGD sgd(0.01);
-        std::vector<double> sgd_weights{0.0, 0.0};
+        ml::Vector sgd_weights{0.0, 0.0};
         for (int step = 0; step < 100; ++step) {
             sgd.step(sgd_weights, quadratic);
         }
 
         ml::ConjugateGradient optimizer;
-        std::vector<double> cg_weights{0.0, 0.0};
+        ml::Vector cg_weights{0.0, 0.0};
         for (int step = 0; step < 100; ++step) {
             optimizer.step(cg_weights, quadratic);
         }

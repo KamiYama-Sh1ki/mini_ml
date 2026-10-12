@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <ml/core/random.hpp>
+#include <ml/core/linalg.hpp>
 #include <ml/core/result.hpp>
 #include <ml/opt/optimizer.hpp>
 
@@ -19,7 +20,7 @@ enum class Sampling {
 
 struct TrainHooks {
     std::function<void(std::size_t epoch, const TrainResult&)> on_epoch;
-    std::function<void(std::size_t epoch, const std::vector<double>&)> on_checkpoint;
+    std::function<void(std::size_t epoch, const Vector&)> on_checkpoint;
 };
 
 class Trainer {
@@ -34,7 +35,7 @@ public:
         }
     }
 
-    TrainResult train(std::vector<double>& weights, std::size_t epochs, std::size_t checkpoint_interval,
+    TrainResult train(Vector& weights, std::size_t epochs, std::size_t checkpoint_interval,
                       const TrainHooks& hooks, RandomGenerator* shuffle_rng = nullptr) {
         if (checkpoint_interval == 0) throw std::invalid_argument("Trainer: checkpoint_interval must be > 0");
         if (sampling_ == Sampling::per_sample && shuffle_rng == nullptr) {

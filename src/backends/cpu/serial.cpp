@@ -4,7 +4,7 @@
 
 namespace ml {
 
-TrainResult SerialBackend::compute_loss_and_gradient(const std::vector<double>& weights, const Dataset1D& data, const MSELoss& loss) const {
+TrainResult SerialBackend::compute_loss_and_gradient(const Vector& weights, const Dataset1D& data, const MSELoss& loss) const {
     if (weights.empty()) throw std::invalid_argument("SerialBackend: weights must not be empty");
     if (data.empty()) throw std::invalid_argument("SerialBackend: dataset must not be empty");
 

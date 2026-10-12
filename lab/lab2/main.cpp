@@ -1,158 +1,96 @@
-#include <bits/stdc++.h>
+#include <cstdint>
+#include <filesystem>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <lab/common/lab_args.hpp>
-#include <lab/common/lab_hooks.hpp>
-#include <lab/common/lab_output.hpp>
-#include <ml/core/random.hpp>
-#include <ml/opt/optimizer.hpp>
-#include <ml/runtime/trainer.hpp>
-
-namespace {
-
-struct Sample {
-    std::vector<double> x;
-    int label;
-};
-
-std::vector<Sample> load_samples(const std::filesystem::path& path) {
-    std::ifstream file(path);
-    if (!file) throw std::runtime_error("failed to open " + path.string());
-    std::string line;
-    std::getline(file, line);
-    std::vector<Sample> data;
-    while (std::getline(file, line)) {
-        std::istringstream row(line);
-        std::string value;
-        std::getline(row, value, ',');
-        Sample sample;
-        sample.label = std::stoi(value);
-        while (std::getline(row, value, ',')) sample.x.push_back(std::stod(value));
-        data.push_back(std::move(sample));
-    }
-    if (data.empty()) throw std::runtime_error("no samples in " + path.string());
-    return data;
-}
-
-double sigmoid(double z) {
-    if (z >= 0.0) return 1.0 / (1.0 + std::exp(-z));
-    const double e = std::exp(z);
-    return e / (1.0 + e);
-}
-
-double softplus(double z) {
-    return z > 30.0 ? z : std::log1p(std::exp(z));
-}
-
-double dot_augmented(const std::vector<double>& w, const std::vector<double>& x) {
-    double sum = w[0];
-    for (std::size_t i = 0; i < x.size(); ++i) sum += w[i + 1] * x[i];
-    return sum;
-}
-
-double penalty_value(const std::vector<double>& w, double decay) {
-    double squared = 0.0;
-    for (std::size_t i = 1; i < w.size(); ++i) squared += w[i] * w[i];
-    return 0.5 * decay * squared;
-}
-
-ml::TrainResult evaluate(const std::vector<double>& w, const std::vector<Sample>& data, double decay) {
-    ml::TrainResult result;
-    result.gradient.assign(w.size(), 0.0);
-    for (const Sample& sample : data) {
-        const double z = dot_augmented(w, sample.x);
-        result.loss += softplus(z) - sample.label * z;
-        const double residual = sigmoid(z) - sample.label;
-        result.gradient[0] += residual;
-        for (std::size_t i = 0; i < sample.x.size(); ++i) result.gradient[i + 1] += residual * sample.x[i];
-    }
-    const double inverse = 1.0 / static_cast<double>(data.size());
-    result.loss *= inverse;
-    for (double& g : result.gradient) g *= inverse;
-    result.loss += penalty_value(w, decay);
-    for (std::size_t i = 1; i < w.size(); ++i) result.gradient[i] += decay * w[i];
-    return result;
-}
-
-}  // namespace
-
-std::unique_ptr<ml::Optimizer> make_optimizer(const std::string& name, double learning_rate) {
-    if (name == "newton") return std::make_unique<ml::NewtonCG>();
-    if (name == "cg") return std::make_unique<ml::ConjugateGradient>();
-    return std::make_unique<ml::SGD>(learning_rate);
-}
+#include <lab/common/lab_training.hpp>
+#include <ml/model/logistic_regression.hpp>
+#include <ml/opt/nonlinear_conjugate_gradient.hpp>
 
 int main(int argc, char* argv[]) {
     try {
         std::string data_path;
-        std::string optimizer = "sgd";
+        std::string split_directory;
+        std::string output_root = "lab/lab2/output";
+        std::string optimizer_name = "sgd";
         std::uint64_t seed = 42;
-        std::size_t epochs = 200;
-        double learning_rate = 0.1;
-        double weight_decay = 0.0;
-        std::size_t checkpoint_interval = 50;
+        std::size_t epochs = 300;
+        std::size_t save_every = 1;
+        int standardize = 0;
+        double learning_rate = 0.01;
+        double decay = 0.0;
+        double test_ratio = 0.2;
+        double tolerance = 1e-7;
+
         lab::ArgParser args;
-        args.add(lab::arg("--optimizer", optimizer, {"sgd", "cg", "newton"}, "sgd (per-sample), cg or newton (full-batch)"));
-        args.add(lab::arg("--data", data_path, "path to samples.csv (default: latest under lab/lab2/data)"));
+        args.add(lab::arg("--optimizer", optimizer_name, "sgd, nonlinear cg (Wolfe), or newton"));
+        args.add(lab::arg("--data", data_path, "CSV dataset (default: latest generated dataset)"));
+        args.add(lab::arg("--split-dir", split_directory, "directory containing shared split indices", {.config_key = "split_dir"}));
+        args.add(lab::arg("--output-root", output_root, "output base directory", {.config_key = "output_root"}));
         args.add(lab::arg("--seed", seed, true, "random seed"));
-        args.add(lab::arg("--epochs", epochs, false, "number of training epochs"));
-        args.add(lab::arg("--learning-rate", learning_rate, false, "sgd learning rate", {.config_key = "learning_rate", .in_summary = false}));
-        args.add(lab::arg("--weight-decay", weight_decay, true, "L2 weight decay, >= 0, w0 exempt", {.config_key = "weight_decay"}));
-        args.add(lab::arg("--save-every", checkpoint_interval, false, "checkpoint interval", {.config_key = "checkpoint_interval"}));
+        args.add(lab::arg("--epochs", epochs, false, "maximum epochs"));
+        args.add(lab::arg("--weight-decay", decay, true, "L2 penalty, bias exempt", {.config_key = "weight_decay"}));
+        args.add(lab::arg("--test-ratio", test_ratio, true, "held-out fraction", {.config_key = "test_ratio"}));
+        args.add(lab::arg("--standardize", standardize, true, "1: fit scaling on training data; 0: raw features"));
+        args.add(lab::arg("--tolerance", tolerance, false, "full-batch gradient tolerance"));
+        args.add(lab::arg("--save-every", save_every, false, "checkpoint interval", {.config_key = "checkpoint_interval"}));
+
+        for (int i = 1; i + 1 < argc; ++i)
+            if (std::string_view(argv[i]) == "--optimizer") optimizer_name = argv[i + 1];
+        if (optimizer_name == "sgd")
+            args.add(lab::arg("--learning-rate", learning_rate, false, "SGD learning rate", {.config_key = "learning_rate"}));
+
         if (args.parse(argc, argv)) {
             args.print_usage(std::cout, argv[0]);
             return 0;
         }
+        if (optimizer_name != "sgd" && optimizer_name != "cg" && optimizer_name != "newton")
+            throw std::invalid_argument("optimizer must be sgd, cg, or newton");
+        if (standardize != 0 && standardize != 1) throw std::invalid_argument("standardize must be 0 or 1");
+        if (!(test_ratio >= 0.0 && test_ratio < 1.0)) throw std::invalid_argument("test ratio must be in [0,1)");
 
-        std::filesystem::path resolved = data_path;
-        if (resolved.empty()) {
-            const std::filesystem::path base = "lab/lab2/data";
-            std::vector<std::filesystem::path> candidates;
-            for (const auto& entry : std::filesystem::directory_iterator(base))
-                if (entry.is_directory() && std::filesystem::exists(entry.path() / "samples.csv"))
-                    candidates.push_back(entry.path());
-            if (candidates.empty()) throw std::runtime_error("no generated data under " + base.string() + ", run lab2_gen first");
-            resolved = *std::max_element(candidates.begin(), candidates.end()) / "samples.csv";
+        const auto source = data_path.empty() ? lab::latest_data("lab/lab2/data") : std::filesystem::path(data_path);
+        const auto full = lab::load_dataset(std::filesystem::absolute(source));
+        const auto data = lab::prepare_experiment(full, test_ratio, seed, split_directory, standardize == 1);
+
+        lab::RunOutput run(output_root);
+        lab::save_experiment(run, data);
+        auto config = run.csv("config.csv");
+        args.write_config(config);
+        config.close();
+
+        ml::LogisticRegression model(data.train.features());
+        auto optimizer = lab::logistic_optimizer(optimizer_name, learning_rate);
+        const bool per_sample = optimizer_name == "sgd";
+        const auto training = lab::train_logistic(model, data.train, *optimizer, per_sample, decay,
+                                                  epochs, save_every, tolerance, seed, run);
+        lab::save_training(run, training);
+
+        auto weights = run.csv("weights.csv");
+        weights << "index,weight\n";
+        for (std::size_t j = 0; j < model.weights().size(); ++j)
+            weights << j << ',' << model.weights()[j] << '\n';
+
+        auto metrics = run.csv("metrics.csv");
+        lab::write_metrics_header(metrics);
+        for (const auto& [name, subset] : std::vector<std::pair<std::string, const lab::Dataset*>>{
+                 {"train", &data.train}, {"test", &data.test}}) {
+            if (subset->size() == 0) continue;
+            const auto result = lab::classification_metrics(model.logits(subset->X), subset->t);
+            lab::write_metrics(metrics, name, result);
+            std::cout << name << " accuracy: " << result.confusion.accuracy()
+                      << " log loss: " << result.log_loss << '\n';
         }
-
-        lab::RunOutput run("lab/lab2/output");
-        const std::vector<Sample> data = load_samples(resolved);
-        const std::size_t weight_count = data.front().x.size() + 1;
-        std::vector<double> weights(weight_count, 0.0);
-        {
-            auto config_file = run.csv("config.csv");
-            args.write_config(config_file);
-        }
-
-        const double decay = weight_decay;
-        auto make_objective = [decay](const std::vector<Sample>& subset) {
-            return ml::Objective([subset, decay](const std::vector<double>& w) { return evaluate(w, subset, decay); });
-        };
-        ml::Objective full_objective = make_objective(data);
-        std::vector<ml::Objective> sample_objectives;
-        for (const Sample& sample : data) sample_objectives.push_back(make_objective({sample}));
-
-        ml::RandomGenerator rng(seed);
-        auto optimizer_ptr = make_optimizer(optimizer, learning_rate);
-        const ml::Sampling sampling = optimizer == "sgd" ? ml::Sampling::per_sample : ml::Sampling::full_batch;
-        ml::Trainer trainer(full_objective, std::move(sample_objectives), *optimizer_ptr, sampling);
-        auto penalty = [&decay](const std::vector<double>& w) { return penalty_value(w, decay); };
-        auto hooks = lab::csv_hooks(run, weights, weights.size(), full_objective, penalty);
-        const ml::TrainResult result = trainer.train(weights, epochs, checkpoint_interval, hooks, &rng);
-
-        std::size_t correct = 0;
-        for (const Sample& sample : data)
-            if ((sigmoid(dot_augmented(weights, sample.x)) >= 0.5 ? 1 : 0) == sample.label) ++correct;
-
-        std::cout << "data: " << std::filesystem::absolute(resolved).string() << '\n'
-                  << "final loss: " << result.loss - penalty(weights) << '\n'
-                  << "accuracy: " << static_cast<double>(correct) / static_cast<double>(data.size()) << '\n';
-        args.print_values(std::cout);
-        std::cout << "learning rate: " << learning_rate << '\n'
+        if (data.test.size() == 0) std::cout << "test evaluation: unavailable (no held-out samples)\n";
+        std::cout << "training status: " << training.status << " epochs: " << training.epochs << '\n'
                   << "CSV output: " << std::filesystem::absolute(run.directory()).string() << '\n';
     } catch (const std::exception& error) {
         std::cerr << "lab2 failed: " << error.what() << '\n';
         return 1;
     }
-
-    return 0;
 }

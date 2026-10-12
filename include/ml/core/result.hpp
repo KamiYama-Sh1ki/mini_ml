@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vector>
+#include <ml/core/linalg.hpp>
 
 namespace ml {
 
 struct TrainResult {
     double loss{};
-    std::vector<double> gradient;
+    Vector gradient;
 };
 
 }

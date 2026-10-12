@@ -7,17 +7,18 @@
 #include <stdexcept>
 #include <vector>
 
+#include <ml/core/linalg.hpp>
 #include <ml/core/result.hpp>
 
 namespace ml {
 
-using Objective = std::function<TrainResult(const std::vector<double>& weights)>;
+using Objective = std::function<TrainResult(const Vector& weights)>;
 
 class Optimizer {
 public:
     virtual ~Optimizer() = default;
 
-    virtual void step(std::vector<double>& weights, const Objective& objective) = 0;
+    virtual void step(Vector& weights, const Objective& objective) = 0;
 
 protected:
     Optimizer() = default;
@@ -30,7 +31,7 @@ public:
         if (!(learning_rate > 0.0)) throw std::invalid_argument("SGD: learning_rate must be > 0");
     }
 
-    void step(std::vector<double>& weights, const Objective& objective) override {
+    void step(Vector& weights, const Objective& objective) override {
         if (!objective) throw std::invalid_argument("SGD::step: objective must not be empty");
 
         const TrainResult result = objective(weights);
@@ -51,7 +52,7 @@ class ConjugateGradient final : public Optimizer {
 public:
     ConjugateGradient() = default;
 
-    void step(std::vector<double>& weights, const Objective& objective) override {
+    void step(Vector& weights, const Objective& objective) override {
         if (!objective) throw std::invalid_argument("ConjugateGradient::step: objective must not be empty");
 
         const TrainResult current = objective(weights);
@@ -125,8 +126,8 @@ public:
     }
 
 private:
-    std::vector<double> direction_;
-    std::vector<double> probe_weights_;
+    Vector direction_;
+    Vector probe_weights_;
     double previous_squared_norm_ = 0.0;
     double last_step_size_ = 0.0;
     bool has_previous_state_ = false;
@@ -140,7 +141,7 @@ public:
         if (max_inner_ == 0) throw std::invalid_argument("NewtonCG: max_inner must be > 0");
     }
 
-    void step(std::vector<double>& weights, const Objective& objective) override {
+    void step(Vector& weights, const Objective& objective) override {
         if (!objective) throw std::invalid_argument("NewtonCG::step: objective must not be empty");
 
         const TrainResult current = objective(weights);
@@ -209,7 +210,7 @@ public:
     }
 
 private:
-    void hessian_vector(const std::vector<double>& weights, const std::vector<double>& vector,
+    void hessian_vector(const Vector& weights, const Vector& vector,
                         const Objective& objective) {
         double vector_norm = 0.0;
         for (double value : vector) vector_norm += value * value;
@@ -241,12 +242,12 @@ private:
 
     double tolerance_;
     std::size_t max_inner_;
-    std::vector<double> gradient_;
-    std::vector<double> direction_;
-    std::vector<double> residual_;
-    std::vector<double> conjugate_;
-    std::vector<double> probe_weights_;
-    std::vector<double> hessian_vector_;
+    Vector gradient_;
+    Vector direction_;
+    Vector residual_;
+    Vector conjugate_;
+    Vector probe_weights_;
+    Vector hessian_vector_;
 };
 
 }

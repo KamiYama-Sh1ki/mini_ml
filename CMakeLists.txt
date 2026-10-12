@@ -129,8 +129,36 @@ add_test(
     COMMAND test_newton_cg
 )
 
+add_executable(test_linalg
+    tests/test_linalg.cpp
+)
+
+target_include_directories(test_linalg
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+)
+
+add_test(
+    NAME linalg
+    COMMAND test_linalg
+)
+
 add_executable(lab2_gen
     lab/lab2/gen.cpp
+)
+
+add_executable(lab2_nb
+    lab/lab2/nb.cpp
+)
+
+target_include_directories(lab2_nb
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}
+)
+
+target_link_libraries(lab2_nb
+    PRIVATE
+        mini_ml
 )
 
 add_executable(lab2_logistic

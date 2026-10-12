@@ -8,7 +8,7 @@
 
 namespace {
 
-ml::TrainResult ridge_quadratic(const std::vector<double>& w) {
+ml::TrainResult ridge_quadratic(const ml::Vector& w) {
     const double dx = w[0] - 1.0;
     const double dy = w[1] - 0.5;
     return ml::TrainResult{0.5 * (dx * dx + 50.0 * dy * dy), {dx, 50.0 * dy}};
@@ -18,10 +18,10 @@ double sigmoid(double z) {
     return z >= 0.0 ? 1.0 / (1.0 + std::exp(-z)) : std::exp(z) / (1.0 + std::exp(z));
 }
 
-ml::TrainResult logistic(const std::vector<double>& w) {
+ml::TrainResult logistic(const ml::Vector& w) {
     const std::vector<std::vector<double>> x{{0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}, {2.0, -1.0}};
     const std::vector<int> t{0, 1, 1, 0, 1};
-    ml::TrainResult result{0.0, {0.0, 0.0, 0.0}};
+    ml::TrainResult result{0.0, ml::Vector(3, 0.0)};
     for (std::size_t i = 0; i < x.size(); ++i) {
         double z = w[0];
         for (std::size_t j = 0; j < 2; ++j) z += w[j + 1] * x[i][j];
@@ -36,10 +36,10 @@ ml::TrainResult logistic(const std::vector<double>& w) {
     return result;
 }
 
-std::vector<double> analytic_hessian_vector(const std::vector<double>& w, const std::vector<double>& v) {
+ml::Vector analytic_hessian_vector(const ml::Vector& w, const ml::Vector& v) {
     const std::vector<std::vector<double>> x{{0.0, 0.0}, {1.0, 0.0}, {0.0, 1.0}, {1.0, 1.0}, {2.0, -1.0}};
-    std::vector<double> augmented(3);
-    std::vector<double> hv(3, 0.0);
+    ml::Vector augmented(3);
+    ml::Vector hv(3, 0.0);
     for (std::size_t i = 0; i < x.size(); ++i) {
         for (int j = 0; j < 3; ++j) augmented[j] = j == 0 ? 1.0 : x[i][static_cast<std::size_t>(j) - 1];
         double z = 0.0;
@@ -59,7 +59,7 @@ std::vector<double> analytic_hessian_vector(const std::vector<double>& w, const 
 int main() {
     {
         ml::NewtonCG optimizer;
-        std::vector<double> w{0.0, 0.0};
+        ml::Vector w{0.0, 0.0};
         double previous = ridge_quadratic(w).loss;
         for (int step = 0; step < 10; ++step) {
             optimizer.step(w, ridge_quadratic);
@@ -72,16 +72,16 @@ int main() {
     }
 
     {
-        const std::vector<double> w{0.3, -0.7, 0.2};
+        const ml::Vector w{0.3, -0.7, 0.2};
         const ml::TrainResult at_w = logistic(w);
-        const std::vector<double> v{0.1, -0.4, 0.9};
+        const ml::Vector v{0.1, -0.4, 0.9};
         const double epsilon = 1.0e-6;
-        std::vector<double> shifted = w;
+        ml::Vector shifted = w;
         for (std::size_t i = 0; i < w.size(); ++i) shifted[i] += epsilon * v[i];
         const ml::TrainResult at_shifted = logistic(shifted);
-        std::vector<double> finite_difference(w.size());
+        ml::Vector finite_difference(w.size());
         for (std::size_t i = 0; i < w.size(); ++i) finite_difference[i] = (at_shifted.gradient[i] - at_w.gradient[i]) / epsilon;
-        const std::vector<double> analytic = analytic_hessian_vector(w, v);
+        const ml::Vector analytic = analytic_hessian_vector(w, v);
         double scale = 0.0;
         double error = 0.0;
         for (std::size_t i = 0; i < w.size(); ++i) {
@@ -93,7 +93,7 @@ int main() {
 
     {
         ml::NewtonCG optimizer(0.1, 20);
-        std::vector<double> w{0.0, 0.0, 0.0};
+        ml::Vector w{0.0, 0.0, 0.0};
         double previous = logistic(w).loss;
         for (int step = 0; step < 50; ++step) {
             optimizer.step(w, logistic);
@@ -118,7 +118,7 @@ int main() {
         assert(thrown);
 
         ml::NewtonCG optimizer;
-        std::vector<double> w{0.0, 0.0};
+        ml::Vector w{0.0, 0.0};
         thrown = false;
         try {
             optimizer.step(w, nullptr);

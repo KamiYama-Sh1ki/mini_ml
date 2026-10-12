@@ -8,14 +8,15 @@
 #include <vector>
 
 #include <lab/common/lab_output.hpp>
+#include <ml/core/linalg.hpp>
 #include <ml/core/result.hpp>
 #include <ml/runtime/trainer.hpp>
 
 namespace lab {
 
-inline ml::TrainHooks csv_hooks(const RunOutput& run, const std::vector<double>& weights,
+inline ml::TrainHooks csv_hooks(const RunOutput& run, const ml::Vector& weights,
                                 std::size_t weight_count, const ml::Objective& full_objective,
-                                const std::function<double(const std::vector<double>&)>& penalty) {
+                                const std::function<double(const ml::Vector&)>& penalty) {
     auto loss_file = std::make_shared<std::ofstream>(run.csv("loss.csv"));
     auto checkpoints_file = std::make_shared<std::ofstream>(run.csv("checkpoints.csv"));
     *loss_file << "epoch,loss,l2_penalty,objective_loss\n";
@@ -30,7 +31,7 @@ inline ml::TrainHooks csv_hooks(const RunOutput& run, const std::vector<double>&
         *loss_file << epoch << ',' << result.loss - value << ',' << value << ',' << result.loss << '\n';
     };
     hooks.on_checkpoint = [checkpoints_file, &full_objective,
-                           penalty](std::size_t epoch, const std::vector<double>& epoch_weights) {
+                           penalty](std::size_t epoch, const ml::Vector& epoch_weights) {
         const ml::TrainResult result = full_objective(epoch_weights);
         const double value = penalty(epoch_weights);
         *checkpoints_file << epoch << ',' << result.loss - value << ',' << value << ',' << result.loss;

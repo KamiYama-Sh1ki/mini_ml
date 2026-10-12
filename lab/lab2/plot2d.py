@@ -66,9 +66,16 @@ def main():
     w0 = float(final["w0"])
     w1 = float(final["w1"])
     w2 = float(final["w2"])
+    if (train_run / "standardizer.csv").exists():
+        scaling = read_rows(train_run / "standardizer.csv")
+        w1 /= float(scaling[0]["scale"])
+        w2 /= float(scaling[1]["scale"])
+        w0 -= w1 * float(scaling[0]["mean"]) + w2 * float(scaling[1]["mean"])
 
     z = w0 + w1 * x1 + w2 * x2
-    accuracy = np.mean((z >= 0.0).astype(int) == labels)
+    metric_rows = read_rows(train_run / "metrics.csv") if (train_run / "metrics.csv").exists() else []
+    metric = {row["split"]: row for row in metric_rows}
+    accuracy = float(metric.get("test", metric.get("train", {"accuracy": "nan"}))["accuracy"])
 
     x_min, x_max = x1.min() - 0.4, x1.max() + 0.4
     y_min, y_max = x2.min() - 0.4, x2.max() + 0.4
@@ -93,7 +100,7 @@ def main():
     axis.set_ylim(y_min, y_max)
     axis.set_xlabel("x0")
     axis.set_ylabel("x1")
-    axis.set_title(f"逻辑回归决策边界(2D 高斯数据,训练精度 = {accuracy:.1%})", fontsize=12)
+    axis.set_title(f"逻辑回归决策边界(2D 数据,测试精度 = {accuracy:.1%})", fontsize=12)
     axis.legend(loc="lower left", fontsize=9, framealpha=0.9)
     axis.grid(True, alpha=0.2)
     figure.tight_layout()
@@ -107,7 +114,8 @@ def main():
     axis.plot(epochs, losses, linewidth=1.8, color="tab:blue")
     axis.set_xlabel("Epoch")
     axis.set_ylabel("交叉熵损失")
-    axis.set_title("SGD 训练损失", fontsize=12)
+    optimizer = read_rows(train_run / "config.csv")[0].get("optimizer", "logistic")
+    axis.set_title(f"{optimizer} 训练损失", fontsize=12)
     axis.grid(True, alpha=0.25)
     figure.tight_layout()
     figure.savefig(train_run / "loss.png", dpi=150)
